@@ -1,0 +1,157 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "weightpipe"
+version = "0.1.0"
+description = "Declarative survey weighting recipes with recipe-aware replicate weights"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+    { name = "Sebastian Daza", email = "sebastian.daza@gmail.com" },
+]
+license = { file = "LICENSE" }
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+    "Development Status :: 3 - Alpha",
+]
+dependencies = [
+    "numpy>=1.26.0",
+    "pandas>=2.2.0",
+    "pyyaml>=6.0.2",
+    "scipy>=1.11.0",
+    "scikit-learn>=1.5.2",
+]
+
+[project.optional-dependencies]
+# Optional backends / diagnostics; keep core lean.
+plot = [
+    "matplotlib>=3.8.0",
+    "seaborn>=0.13.2",
+]
+# Gold-standard cross-checks against R (local/CI with rpy2 when needed).
+r-gold = [
+    "rpy2>=3.5.16",
+]
+
+[project.urls]
+Homepage = "https://github.com/sdaza/weightpipe"
+Repository = "https://github.com/sdaza/weightpipe"
+Issues = "https://github.com/sdaza/weightpipe/issues"
+Changelog = "https://github.com/sdaza/weightpipe/blob/main/CHANGELOG.md"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["weightpipe*"]
+exclude = ["tests*", "examples*", "docs*"]
+
+# uv is the package manager for this repo (lockfile, sync, run, add/remove).
+[tool.uv]
+package = true
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.5",
+    "mypy>=1.14.1",
+    "ruff>=0.11.7",
+    "ipykernel>=6.29.5",
+]
+
+[tool.ruff]
+exclude = [
+    ".bzr",
+    ".direnv",
+    ".eggs",
+    ".git",
+    ".git-rewrite",
+    ".hg",
+    ".ipynb",
+    ".ipynb_checkpoints",
+    ".mypy_cache",
+    ".nox",
+    ".pants.d",
+    ".pyenv",
+    ".pytest_cache",
+    ".pytype",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    ".vscode",
+    "__pypackages__",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
+    "node_modules",
+    "site-packages",
+    "venv",
+    "examples",
+]
+line-length = 120
+indent-width = 4
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["INP001"]
+fixable = ["ALL"]
+unfixable = []
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+docstring-code-format = false
+docstring-code-line-length = "dynamic"
+
+[tool.mypy]
+python_version = "3.11"
+show_error_codes = true
+show_error_context = true
+pretty = true
+warn_unused_ignores = true
+warn_unused_configs = true
+ignore_missing_imports = true
+warn_unreachable = true
+warn_redundant_casts = true
+check_untyped_defs = true
+disallow_untyped_calls = true
+disallow_incomplete_defs = true
+disallow_any_generics = true
+disallow_subclassing_any = false
+exclude = [
+    ".venv",
+    "build",
+    "dist",
+    "examples",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+markers = [
+    "recovery: Monte Carlo or gold-standard recovery checks (must pass before public Recipe steps)",
+    "gold: External reference / gold-file comparisons (e.g. R survey packages)",
+]
+norecursedirs = [
+    ".git",
+    ".venv",
+    "venv",
+    ".pytest_cache",
+    ".ruff_cache",
+    "__pycache__",
+    "*.egg-info",
+    "build",
+    "dist",
+    "examples",
+    "docs",
+]

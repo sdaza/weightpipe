@@ -1,0 +1,14 @@
+.DS_Store
+.venv
+.env
+.vscode
+.idea
+.*cache
+__pycache__/
+*.egg-info/
+/build/
+/dist/
+.cursor
+.claude
+*.png
+settings.json

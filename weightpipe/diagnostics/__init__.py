@@ -1,0 +1,34 @@
+"""Weight / design-effect diagnostics."""
+
+import numpy as np
+import pandas as pd
+
+from weightpipe.result import WeightResult
+
+
+def design_effect(weights: pd.Series | WeightResult) -> float:
+    """Kish design effect from unequal weighting: 1 + CV(w)^2 = n * sum(w^2) / sum(w)^2."""
+    w = weights.weights if isinstance(weights, WeightResult) else weights
+    w = w.astype(float)
+    active = w[w > 0]
+    if active.empty:
+        return float("nan")
+    n = float(len(active))
+    s = float(active.sum())
+    if s <= 0:
+        return float("nan")
+    return float(n * float(np.sum(np.square(active.to_numpy()))) / (s * s))
+
+
+def ess(weights: pd.Series | WeightResult) -> float:
+    """Effective sample size under Kish: (sum w)^2 / sum(w^2)."""
+    w = weights.weights if isinstance(weights, WeightResult) else weights
+    w = w.astype(float)
+    active = w[w > 0]
+    if active.empty:
+        return float("nan")
+    s = float(active.sum())
+    ss = float(np.sum(np.square(active.to_numpy())))
+    if ss <= 0:
+        return float("nan")
+    return float((s * s) / ss)
