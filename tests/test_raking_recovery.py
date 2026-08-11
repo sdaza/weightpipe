@@ -3,7 +3,6 @@
 If a claim fails: diagnose; do not loosen tolerances without understanding why.
 """
 
-import numpy as np
 import pandas as pd
 import pytest
 
@@ -25,10 +24,3 @@ def test_rake_analytical_toy_totals() -> None:
     for row in diag["targets"]:
         assert row["achieved"] == pytest.approx(row["target"], abs=1e-8)
     assert float(w.sum()) == pytest.approx(100.0, abs=1e-8)
-
-
-@pytest.mark.gold
-@pytest.mark.skip(reason="Add tests/gold raking CSV from R reference packages before enabling")
-def test_rake_matches_r_gold() -> None:
-    """Optional cross-check against exported R gold files in tests/gold/."""
-    _ = np, pd, rake

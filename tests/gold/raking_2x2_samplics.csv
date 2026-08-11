@@ -1,0 +1,5 @@
+unit_id,sex,region,pw,weight_samplics
+1,M,N,1.0,18.0
+2,M,S,1.0,42.0
+3,F,N,1.0,12.0
+4,F,S,1.0,28.0

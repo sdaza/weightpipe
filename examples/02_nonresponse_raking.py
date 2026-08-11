@@ -62,6 +62,7 @@ recipe.to_dict()
 fitted = recipe.prep(min_cell_n=1, max_factor=None, warn=False)
 weighted = collect_weights(fitted, keep_intermediate=True, drop_zero=True)
 
+# %%
 print("active units =", len(weighted))
 print("sum(weight) =", round(float(weighted["weight"].sum()), 3))
 print("Kish deff =", round(design_effect(fitted), 3))

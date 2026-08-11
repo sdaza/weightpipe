@@ -1,14 +1,24 @@
 """Immutable, lazy weighting recipe."""
 
 from dataclasses import dataclass, field, replace
-from typing import Any, Self
+from typing import TYPE_CHECKING, Any, Self
 
 import numpy as np
 import pandas as pd
 
 from weightpipe.frame import WeightFrame
 from weightpipe.result import WeightResult
-from weightpipe.steps import CalibrateStep, DropIneligibleStep, NonresponseStep
+from weightpipe.steps import (
+    CalibrateStep,
+    DropIneligibleStep,
+    NonresponseStep,
+    TrimStep,
+    TrimWeightsStep,
+    UnknownEligibilityStep,
+)
+
+if TYPE_CHECKING:
+    from weightpipe.design import Design
 
 
 @dataclass(frozen=True)
@@ -20,9 +30,37 @@ class Recipe:
     unit_id: str | None = None
     steps: tuple[Any, ...] = ()
     meta: dict[str, Any] = field(default_factory=dict)
+    design: Any | None = None  # Design | None; Any avoids runtime circular import
+
+    @classmethod
+    def from_design(cls, design: "Design", *, unit_id: str | None = None) -> Self:
+        """Start a recipe from a sampling ``Design`` (base weights + strata/PSU)."""
+        return cls(
+            data=design.data,
+            base_weight=design.weight,
+            unit_id=unit_id,
+            design=design,
+            meta={"design": design.to_dict()},
+        )
 
     def _with_step(self, step: Any) -> Self:
         return replace(self, steps=(*self.steps, step))
+
+    def step_unknown_eligibility(
+        self,
+        *,
+        unknown: str,
+        by: list[str] | tuple[str, ...] | str | None = None,
+        cluster: str | None = None,
+    ) -> Self:
+        by_t: tuple[str, ...] | None
+        if by is None:
+            by_t = None
+        elif isinstance(by, str):
+            by_t = (by,)
+        else:
+            by_t = tuple(by)
+        return self._with_step(UnknownEligibilityStep(unknown=unknown, by=by_t, cluster=cluster))
 
     def step_drop_ineligible(self, *, ineligible: str) -> Self:
         return self._with_step(DropIneligibleStep(ineligible=ineligible))
@@ -33,10 +71,15 @@ class Recipe:
         respondent: str,
         method: str = "weighting_class",
         by: list[str] | tuple[str, ...] | str | None = None,
+        formula: str | list[str] | tuple[str, ...] | None = None,
+        engine: str = "logit",
+        num_classes: int | None = 5,
+        weight_model: bool = True,
+        cluster: str | None = None,
         **kwargs: Any,
     ) -> Self:
         if kwargs:
-            raise TypeError(f"Unsupported nonresponse kwargs in Iteration 1: {sorted(kwargs)}")
+            raise TypeError(f"Unsupported nonresponse kwargs: {sorted(kwargs)}")
         by_t: tuple[str, ...] | None
         if by is None:
             by_t = None
@@ -44,7 +87,25 @@ class Recipe:
             by_t = (by,)
         else:
             by_t = tuple(by)
-        return self._with_step(NonresponseStep(respondent=respondent, method=method, by=by_t))
+        formula_t: str | tuple[str, ...] | None
+        if formula is None:
+            formula_t = None
+        elif isinstance(formula, str):
+            formula_t = formula
+        else:
+            formula_t = tuple(formula)
+        return self._with_step(
+            NonresponseStep(
+                respondent=respondent,
+                method=method,
+                by=by_t,
+                formula=formula_t,
+                engine=engine,
+                num_classes=num_classes,
+                weight_model=weight_model,
+                cluster=cluster,
+            )
+        )
 
     def step_calibrate(
         self,
@@ -53,24 +114,92 @@ class Recipe:
         margins: dict[str, dict[str, float]] | None = None,
         proportions: dict[str, dict[str, float]] | None = None,
         population_size: float | None = None,
+        formula: str | list[str] | tuple[str, ...] | None = None,
+        totals: dict[str, float] | None = None,
+        bounds: tuple[float, float] | list[float] | None = None,
+        penalty: float | dict[str, float] | None = None,
+        calfun: str = "linear",
         max_iter: int = 50,
         tol: float = 1e-6,
         **kwargs: Any,
     ) -> Self:
         if kwargs:
-            raise TypeError(f"Unsupported calibrate kwargs in Iteration 1: {sorted(kwargs)}")
+            raise TypeError(f"Unsupported calibrate kwargs: {sorted(kwargs)}")
+        formula_t: str | tuple[str, ...] | None
+        if formula is None:
+            formula_t = None
+        elif isinstance(formula, str):
+            formula_t = formula
+        else:
+            formula_t = tuple(formula)
+        bounds_t = None if bounds is None else (float(bounds[0]), float(bounds[1]))
         return self._with_step(
             CalibrateStep(
                 method=method,
                 margins=margins,
                 proportions=proportions,
                 population_size=population_size,
+                formula=formula_t,
+                totals=totals,
+                bounds=bounds_t,
+                penalty=penalty,
+                calfun=calfun,
                 max_iter=max_iter,
                 tol=tol,
             )
         )
 
-    # Back-compat aliases (gated soft names from scaffold)
+    def step_trim(
+        self,
+        *,
+        max_ratio: float,
+        min_ratio: float | None = None,
+        reference: str = "median",
+        redistribute: bool = True,
+        by: list[str] | tuple[str, ...] | str | None = None,
+        max_iter: int = 50,
+    ) -> Self:
+        by_t: tuple[str, ...] | None
+        if by is None:
+            by_t = None
+        elif isinstance(by, str):
+            by_t = (by,)
+        else:
+            by_t = tuple(by)
+        return self._with_step(
+            TrimStep(
+                max_ratio=max_ratio,
+                min_ratio=min_ratio,
+                reference=reference,  # type: ignore[arg-type]
+                redistribute=redistribute,
+                by=by_t,
+                max_iter=max_iter,
+            )
+        )
+
+    def step_trim_weights(
+        self,
+        *,
+        lower: float = 1.0,
+        upper: float | None = None,
+        method: str = "tukey",
+        redistribute: str = "proportional",
+        strict: bool = True,
+        max_iter: int = 50,
+    ) -> Self:
+        """Automatic Tukey / Potter trimming (weightflow ``step_trim_weights``)."""
+        return self._with_step(
+            TrimWeightsStep(
+                lower=lower,
+                upper=upper,
+                method=method,  # type: ignore[arg-type]
+                redistribute=redistribute,
+                strict=strict,
+                max_iter=max_iter,
+            )
+        )
+
+    # Back-compat aliases
     def calibrate(self, **kwargs: Any) -> Self:
         return self.step_calibrate(**kwargs)
 
@@ -78,15 +207,18 @@ class Recipe:
         return self.step_nonresponse(**kwargs)
 
     def trim(self, **kwargs: Any) -> Self:
-        raise NotImplementedError("step_trim is deferred past Iteration 1")
+        return self.step_trim(**kwargs)
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        out = {
             "base_weight": self.base_weight,
             "unit_id": self.unit_id,
             "steps": [s.to_dict() for s in self.steps],
             "meta": dict(self.meta),
         }
+        if self.design is not None:
+            out["design"] = self.design.to_dict()
+        return out
 
     def prep(
         self,
@@ -108,7 +240,10 @@ class Recipe:
         for step in self.steps:
             step.validate(frame)
             w_before = frame.weights
-            res = step.apply(frame, warn=warn) if step.name == "calibrate" else step.apply(frame)
+            if step.name == "calibrate":
+                res = step.apply(frame, warn=warn)
+            else:
+                res = step.apply(frame)
             frame = frame.with_step(
                 step.name,
                 weights=res.weights,
@@ -178,9 +313,9 @@ def _step_alerts(
             alerts.append(f"[{step_name}] {int(excessive.sum())} unit(s) have adjustment factor > {max_factor}")
     if min_cell_n is not None and "cells" in diagnostics:
         for row in diagnostics["cells"]:
-            n_resp = int(row.get("n_respondents") or 0)
+            n_resp = int(row.get("n_respondents") or row.get("n_known") or 0)
             if 0 < n_resp < min_cell_n:
-                alerts.append(
-                    f"[{step_name}] cell {row.get('cell')!r} has n_respondents={n_resp} < min_cell_n={min_cell_n}"
-                )
+                alerts.append(f"[{step_name}] cell {row.get('cell')!r} has n={n_resp} < min_cell_n={min_cell_n}")
+    if diagnostics.get("single_class"):
+        alerts.append(f"[{step_name}] propensity classes collapsed to a single class (near-constant p)")
     return alerts
