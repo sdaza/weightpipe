@@ -29,7 +29,7 @@ def test_estimate_ratio_and_median() -> None:
             "pw": [1.0] * 8,
         }
     )
-    design = Design.cluster(df, weight="pw", psu="psu", strata="stratum")
+    design = Design(df, weight="pw", psu="psu", strata="stratum")
     recipe = Recipe.from_design(design)
     fitted = recipe.prep()
 
@@ -53,6 +53,6 @@ def test_estimate_ratio_and_median() -> None:
 
 def test_ratio_requires_denominator() -> None:
     df = pd.DataFrame({"y": [1.0, 2.0]})
-    recipe = Recipe.from_design(Design.srs(df, N=10))
+    recipe = Recipe.from_design(Design(df, N=10))
     with pytest.raises(ValueError, match="denominator"):
         estimate(recipe, "y", estimand="ratio", replicates=10, seed=1)

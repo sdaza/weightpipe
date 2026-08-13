@@ -29,7 +29,7 @@ df = pd.DataFrame(
 df.loc[0, "responded"] = 1
 df.loc[1, "responded"] = 0
 
-design = Design.cluster(df, weight="pw", psu="psu", strata="stratum")
+design = Design(df, weight="pw", psu="psu", strata="stratum")
 pop = pd.DataFrame(
     {
         "region": ["North"] * 200 + ["South"] * 200,

@@ -69,7 +69,7 @@ def test_allocation_table_hands_off_to_stratified_design() -> None:
             "y": 1.0,
         }
     ).reset_index(drop=True)
-    design = Design.stratified(sample, stratum="region", N_h=populations)
+    design = Design(sample, strata="region", N_h=populations)
     assert design.kind == "stratified"
     assert design.data.groupby("region")[design.weight].first().to_dict() == {
         "North": pytest.approx(20.0),

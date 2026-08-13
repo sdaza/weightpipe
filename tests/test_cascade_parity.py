@@ -150,7 +150,7 @@ def test_jackknife_factors_and_estimate() -> None:
             "pw": [2.0, 2.0, 2.0, 2.0, 3.0, 3.0, 3.0, 3.0],
         }
     )
-    design = Design.cluster(df, weight="pw", psu="psu", strata="stratum")
+    design = Design(df, weight="pw", psu="psu", strata="stratum")
     recipe = Recipe.from_design(design)
     jack = jackknife_weights(recipe)
     # 2 strata × 2 PSUs = 4 replicates

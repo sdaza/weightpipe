@@ -1,5 +1,10 @@
 # weightpipe
 
+[![CI](https://github.com/sdaza/weightpipe/actions/workflows/ci.yml/badge.svg)](https://github.com/sdaza/weightpipe/actions/workflows/ci.yml)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+
 Declarative survey weighting recipes with **recipe-aware replicate weights**, diagnostics, and bootstrap/jackknife SE/CIs.
 
 Methods ship behind a validation gate: analytical/composition/recovery tests must pass before a public `Recipe.step_*()` is ungated.
@@ -22,14 +27,12 @@ Cross-package gold (`@pytest.mark.gold`):
 - R `survey` + `weightflow`: `Rscript tests/gold/generate_r_gold.R`; checks in [`tests/test_gold_r_packages.py`](tests/test_gold_r_packages.py) (skip if R/packages/CSVs missing). Optional `uv sync --extra r-gold` for live rpy2.
 - R `sampler` planning: regenerate with `Rscript tests/gold/generate_sampler_gold.R`; CSV + optional live checks in [`tests/test_gold_sampler.py`](tests/test_gold_sampler.py)
 
-Examples (`# %%` cells): [`01`](examples/01_minimal_recipe.py) · [`02`](examples/02_nonresponse_raking.py) · [`03`](examples/03_designs_estimate.py) · [`04`](examples/04_cascade_parity.py)
-
 ## Quickstart
 
 ```python
 from weightpipe import Design, Recipe, estimate, population_totals
 
-design = Design.cluster(df, weight="pw", psu="psu", strata="stratum")
+design = Design(df, weight="pw", psu="psu", strata="stratum")
 totals = population_totals(pop, "~ region + sex + age")
 
 recipe = (
@@ -75,12 +78,20 @@ estimate(recipe, "y", estimand="median", fitted=fitted, variance="jackknife")
 
 ## Designs and estimation
 
+`Design` takes the sampling inputs; ``kind`` is inferred (you do not name SRS/stratified/cluster):
+
 ```python
-Design.srs(df, N=10_000)  # w = N/n
-Design.stratified(df, stratum="region", N_h={...})  # w = N_h/n_h
-Design.cluster(df, weight="pw", psu="psu", strata=...)
-Design.from_weights(df, weight="pw", strata=..., psu=...)
+Design(df, N=10_000)  # SRS: w = N/n
+Design(df, strata="region", N_h={...})  # stratified SRS: w = N_h/n_h
+Design(df, weight="pw", psu="psu")  # cluster
+Design(df, weight="pw", psu="psu", strata="stratum")  # stratified cluster
+Design(df, probabilities=["p1", "p2"], psu="psu", strata="stratum")  # multi-stage: w = 1/(p1*p2)
+Design(df, stage_weights=["w1", "w2"], psu="psu")  # multi-stage: w = w1*w2
+Design(df, weight="pw")  # existing weights
 ```
+
+Multi-stage designs fold stage selection into the weight and use ``psu`` as the
+ultimate cluster for bootstrap/jackknife variance.
 
 `estimate(..., estimand=)` supports `mean`, `total`, `proportion`, `ratio` (`denominator=`), and `median`. Variance: `none`, `bootstrap` (Rao–Wu), or `jackknife` (delete-a-PSU).
 
@@ -109,7 +120,7 @@ plan = allocation_table(populations, sample=400, method="mixed")
 stratified_margin_of_error(plan["sample"], population=plan["population"])
 
 # After drawing the planned cases into df:
-design = Design.stratified(df, stratum="region", N_h=populations)
+design = Design(df, strata="region", N_h=populations)
 ```
 
 Allocation methods are `mixed` (equal/proportional blend), `root`, `neyman`,
