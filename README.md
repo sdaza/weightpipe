@@ -128,6 +128,33 @@ Interactive scripts (run cell-by-cell or with Python):
 - [`examples/03_designs_estimate.py`](examples/03_designs_estimate.py)
 - [`examples/04_cascade_parity.py`](examples/04_cascade_parity.py)
 
+## Gold testing
+
+Gold tests compare weightpipe to frozen reference outputs (and optionally live samplics / R) on the same toy inputs. CSVs live in [`tests/gold/`](tests/gold/).
+
+**Run the gold suite** (same idea as CI):
+
+```bash
+uv sync --all-groups --extra gold --locked
+uv run --extra gold pytest -m gold -q
+```
+
+Or run everything (unit tests + gold):
+
+```bash
+uv run --extra gold pytest -q
+```
+
+Frozen CSV checks always run when the files are present. Live samplics needs the `gold` extra; live R checks need R packages and optionally `uv sync --extra r-gold`.
+
+**Regenerate frozen CSVs** (local only — not CI). Do this when a reference tool or gold scenario intentionally changes, then commit the updated files under `tests/gold/`:
+
+```bash
+uv run --extra gold python tests/gold/generate_samplics_gold.py
+Rscript tests/gold/generate_r_gold.R          # needs R packages survey + weightflow
+Rscript tests/gold/generate_sampler_gold.R    # needs R package sampler (or SAMPLER_R_DIR)
+```
+
 ## License
 
 MIT
