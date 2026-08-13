@@ -14,6 +14,14 @@ pip install weightpipe
 uv add weightpipe
 ```
 
+From GitHub (latest `main`):
+
+```bash
+pip install "git+https://github.com/sdaza/weightpipe.git"
+# or
+uv add "git+https://github.com/sdaza/weightpipe.git"
+```
+
 Requires Python 3.11+.
 
 ## Quickstart
