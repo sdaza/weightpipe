@@ -17,7 +17,7 @@ df_srs = pd.DataFrame(
         "employed": [1, 0, 1, 1, 0, 1],
     }
 )
-design_srs = Design.srs(df_srs, N=600)
+design_srs = Design(df_srs, N=600)
 recipe_srs = Recipe.from_design(design_srs)
 print("SRS weights:", design_srs.data[design_srs.weight].unique())
 estimate(recipe_srs, "y", estimand="mean", replicates=100, seed=1)
@@ -34,7 +34,7 @@ df_st = pd.DataFrame(
         "employed": [1, 1, 0, 1, 0, 1, 1, 0, 1, 1],
     }
 )
-design_st = Design.stratified(df_st, stratum="stratum", N_h={"North": 40, "South": 90})
+design_st = Design(df_st, strata="stratum", N_h={"North": 40, "South": 90})
 recipe_st = Recipe.from_design(design_st)
 print(design_st.data.groupby("stratum")[design_st.weight].first())
 estimate(recipe_st, "y", estimand="mean", replicates=100, seed=2)
@@ -51,7 +51,7 @@ df_cl = pd.DataFrame(
         "pw": [2.0, 2.0, 2.5, 2.5, 3.0, 3.0, 1.5, 1.5],
     }
 )
-design_cl = Design.cluster(df_cl, weight="pw", psu="psu", strata="stratum")
+design_cl = Design(df_cl, weight="pw", psu="psu", strata="stratum")
 recipe_cl = (
     Recipe.from_design(design_cl)
     # optional adjustments still compose on top of design weights
@@ -82,6 +82,26 @@ print(
 print("median y (jackknife)")
 print(
     estimate(recipe_cl, "y", estimand="median", fitted=fitted, variance="jackknife")
+    .round(3)
+    .to_string(index=False)
+)
+
+# %%
+# --- Multi-stage from inclusion probabilities: w = 1/(p1*p2); psu = ultimate cluster ---
+df_ms = pd.DataFrame(
+    {
+        "stratum": ["A", "A", "A", "A", "B", "B", "B", "B"],
+        "psu": [1, 1, 2, 2, 3, 3, 4, 4],
+        "p1": [0.2] * 8,
+        "p2": [0.5, 0.5, 0.4, 0.4, 0.5, 0.5, 0.25, 0.25],
+        "y": [10.0, 12.0, 20.0, 22.0, 11.0, 13.0, 21.0, 23.0],
+    }
+)
+design_ms = Design(df_ms, probabilities=["p1", "p2"], psu="psu", strata="stratum")
+print("multistage kind:", design_ms.kind)
+print("weights:", design_ms.data[design_ms.weight].tolist())
+print(
+    estimate(Recipe.from_design(design_ms), "y", estimand="mean", variance="jackknife")
     .round(3)
     .to_string(index=False)
 )

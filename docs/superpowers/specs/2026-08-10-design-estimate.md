@@ -8,10 +8,14 @@ recipe-aware bootstrap SE/CI.
 
 ## API
 
-- `Design.srs(data, N=...)` → `w = N/n`
-- `Design.stratified(data, stratum=..., N_h=...)` → `w = N_h/n_h`
-- `Design.cluster(data, weight=..., psu=..., strata=...)` → user weights + ultimate cluster
-- `Design.from_weights(...)` → arbitrary precomputed weights
+`Design` is parameter-driven; ``kind`` is inferred from inputs:
+
+- `Design(data, N=...)` → SRS, `w = N/n`
+- `Design(data, strata=..., N_h=...)` → stratified SRS, `w = N_h/n_h`
+- `Design(data, weight=..., psu=..., strata=...)` → cluster / stratified cluster
+- `Design(data, probabilities=[...], psu=..., strata=...)` → multi-stage, `w = 1/∏π_k`
+- `Design(data, stage_weights=[...], psu=...)` → multi-stage, `w = ∏w_k`
+- `Design(data, weight=...)` → existing weights
 - `Recipe.from_design(design)`
 - `estimate(recipe, var, estimand=..., replicates=...)`
 
