@@ -10,5 +10,6 @@ __pycache__/
 /dist/
 .cursor
 .claude
+.tmp/
 *.png
 settings.json
