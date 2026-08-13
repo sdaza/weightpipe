@@ -17,9 +17,10 @@ CI runs `uv sync --all-groups --extra gold --locked` — commit `uv.lock`.
 
 Cross-package gold (`@pytest.mark.gold`):
 
-- Always-on: frozen CSVs in [`tests/gold/`](tests/gold/)
+- Always-on: frozen CSVs in [`tests/gold/`](tests/gold/) (includes R `sampler` planning gold for CI — no R on Actions)
 - Live samplics: optional extra `gold` ([`tests/test_gold_samplics.py`](tests/test_gold_samplics.py))
 - R `survey` + `weightflow`: `Rscript tests/gold/generate_r_gold.R`; checks in [`tests/test_gold_r_packages.py`](tests/test_gold_r_packages.py) (skip if R/packages/CSVs missing). Optional `uv sync --extra r-gold` for live rpy2.
+- R `sampler` planning: regenerate with `Rscript tests/gold/generate_sampler_gold.R`; CSV + optional live checks in [`tests/test_gold_sampler.py`](tests/test_gold_sampler.py)
 
 Examples (`# %%` cells): [`01`](examples/01_minimal_recipe.py) · [`02`](examples/02_nonresponse_raking.py) · [`03`](examples/03_designs_estimate.py) · [`04`](examples/04_cascade_parity.py)
 
@@ -82,6 +83,39 @@ Design.from_weights(df, weight="pw", strata=..., psu=...)
 ```
 
 `estimate(..., estimand=)` supports `mean`, `total`, `proportion`, `ratio` (`denominator=`), and `median`. Variance: `none`, `bootstrap` (Rao–Wu), or `jackknife` (delete-a-PSU).
+
+## Sample planning
+
+Planning and weighting live in the same `weightpipe` package. Use the
+planning helpers before fieldwork, then pass the resulting population sizes
+to `Design` after drawing the sample.
+
+```python
+from weightpipe import (
+    Design,
+    allocate_strata,
+    allocation_table,
+    margin_of_error,
+    sample_size,
+    stratified_margin_of_error,
+)
+
+sample_size(0.05)  # 384 cases for ±5 percentage points at 95%
+sample_size(0.05, deff=1.2, response_rate=0.9, population=10_000)
+margin_of_error(384)
+
+populations = {"North": 5_000, "South": 15_000}
+plan = allocation_table(populations, sample=400, method="mixed")
+stratified_margin_of_error(plan["sample"], population=plan["population"])
+
+# After drawing the planned cases into df:
+design = Design.stratified(df, stratum="region", N_h=populations)
+```
+
+Allocation methods are `mixed` (equal/proportional blend), `root`, `neyman`,
+`stdev`, and `error` (a target margin for each stratum). Planning `deff` is an
+assumption made before fieldwork; `design_effect(weights)` is a post-fieldwork
+diagnostic.
 
 ## Validation policy
 
