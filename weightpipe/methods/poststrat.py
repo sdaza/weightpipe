@@ -17,6 +17,7 @@ def poststratify(
     margins: MarginDict | None = None,
     proportions: MarginDict | None = None,
     population_size: float | None = None,
+    force1: bool = True,
 ) -> tuple[pd.Series, pd.Series, dict[str, Any]]:
     """Post-stratify on a single categorical variable (cell factors ``N_g / hat N_g``).
 
@@ -29,6 +30,7 @@ def poststratify(
         margins=margins,
         proportions=proportions,
         population_size=population_size,
+        force1=force1,
     )
     if len(resolved) != 1:
         raise ValueError(
@@ -85,6 +87,7 @@ def apply_poststratify(
     margins: MarginDict | None = None,
     proportions: MarginDict | None = None,
     population_size: float | None = None,
+    force1: bool = True,
 ) -> StepResult:
     weights, factors, diag = poststratify(
         frame.weights,
@@ -92,5 +95,6 @@ def apply_poststratify(
         margins=margins,
         proportions=proportions,
         population_size=population_size,
+        force1=force1,
     )
     return StepResult(weights=weights, factors=factors, diagnostics=diag)

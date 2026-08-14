@@ -146,6 +146,7 @@ class CalibrateStep:
     calfun: str = "linear"
     max_iter: int = 50
     tol: float = 1e-6
+    force1: bool = True
     name: str = "calibrate"
 
     def validate(self, frame: WeightFrame) -> None:
@@ -186,6 +187,7 @@ class CalibrateStep:
                 margins=self.margins,
                 proportions=self.proportions,
                 population_size=self.population_size,
+                force1=self.force1,
                 max_iter=self.max_iter,
                 tol=self.tol,
                 warn=warn,
@@ -196,6 +198,7 @@ class CalibrateStep:
                 margins=self.margins,
                 proportions=self.proportions,
                 population_size=self.population_size,
+                force1=self.force1,
             )
         assert self.formula is not None and self.totals is not None
         return apply_linear_calibrate(
@@ -216,6 +219,7 @@ class CalibrateStep:
             "margins": self.margins,
             "proportions": self.proportions,
             "population_size": self.population_size,
+            "force1": self.force1,
             "formula": self.formula
             if isinstance(self.formula, str)
             else (list(self.formula) if self.formula is not None else None),

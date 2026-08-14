@@ -121,6 +121,7 @@ class Recipe:
         calfun: str = "linear",
         max_iter: int = 50,
         tol: float = 1e-6,
+        force1: bool = True,
         **kwargs: Any,
     ) -> Self:
         if kwargs:
@@ -146,6 +147,7 @@ class Recipe:
                 calfun=calfun,
                 max_iter=max_iter,
                 tol=tol,
+                force1=force1,
             )
         )
 

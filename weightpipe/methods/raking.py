@@ -17,10 +17,13 @@ def proportions_to_margins(
     *,
     total: float,
     atol: float = 1e-6,
+    force1: bool = True,
 ) -> MarginDict:
     """Convert per-variable category proportions into absolute margin totals.
 
-    Each variable's proportions must be non-negative and sum to 1 (within ``atol``).
+    Each variable's proportions must be non-negative. By default (``force1=True``),
+each distribution is renormalized to sum to 1 — useful for rounded census
+targets. Set ``force1=False`` to require an exact sum of 1 (within ``atol``).
     """
     if total <= 0:
         raise ValueError(f"total must be positive, got {total}")
@@ -32,8 +35,15 @@ def proportions_to_margins(
         if any(v < 0 for v in vals.values()):
             raise ValueError(f"proportions[{var!r}] must be non-negative")
         s = sum(vals.values())
-        if abs(s - 1.0) > atol:
-            raise ValueError(f"proportions[{var!r}] must sum to 1 (got {s}); pass shares that form a distribution")
+        if force1:
+            if s <= 0:
+                raise ValueError(f"proportions[{var!r}] must have a positive sum to force1")
+            vals = {k: v / s for k, v in vals.items()}
+        elif abs(s - 1.0) > atol:
+            raise ValueError(
+                f"proportions[{var!r}] must sum to 1 (got {s}); "
+                "pass shares that form a distribution, or set force1=True"
+            )
         margins[var] = {k: v * float(total) for k, v in vals.items()}
     return margins
 
@@ -44,6 +54,7 @@ def resolve_raking_margins(
     margins: MarginDict | None = None,
     proportions: MarginDict | None = None,
     population_size: float | None = None,
+    force1: bool = True,
 ) -> tuple[MarginDict, dict[str, Any]]:
     """Resolve absolute margins from either counts or proportions.
 
@@ -65,8 +76,12 @@ def resolve_raking_margins(
         else:
             meta["total_source"] = "population_size"
         meta["total"] = total
-        meta["proportions"] = {v: {str(k): float(x) for k, x in d.items()} for v, d in proportions.items()}
-        resolved = proportions_to_margins(proportions, total=total)
+        meta["force1"] = bool(force1)
+        resolved = proportions_to_margins(proportions, total=total, force1=force1)
+        # Store the (possibly renormalized) proportions used as targets.
+        meta["proportions"] = {
+            var: {lev: float(tot) / total for lev, tot in dist.items()} for var, dist in resolved.items()
+        }
         meta["resolved_margins"] = resolved
         return resolved, meta
 
@@ -83,6 +98,7 @@ def rake(
     margins: MarginDict | None = None,
     proportions: MarginDict | None = None,
     population_size: float | None = None,
+    force1: bool = True,
     max_iter: int = 50,
     tol: float = 1e-6,
     warn: bool = True,
@@ -93,6 +109,7 @@ def rake(
         margins=margins,
         proportions=proportions,
         population_size=population_size,
+        force1=force1,
     )
 
     w0 = weights.astype(float).to_numpy(copy=True)
@@ -166,6 +183,7 @@ def apply_raking(
     margins: MarginDict | None = None,
     proportions: MarginDict | None = None,
     population_size: float | None = None,
+    force1: bool = True,
     max_iter: int = 50,
     tol: float = 1e-6,
     warn: bool = True,
@@ -176,6 +194,7 @@ def apply_raking(
         margins=margins,
         proportions=proportions,
         population_size=population_size,
+        force1=force1,
         max_iter=max_iter,
         tol=tol,
         warn=warn,
