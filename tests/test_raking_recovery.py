@@ -64,11 +64,6 @@ def test_recipe_calibrate_force1() -> None:
     df = pd.DataFrame({"sex": ["M", "F", "M", "F"], "pw": [1.0, 1.0, 1.0, 1.0]})
     # deliberately does not sum to 1
     props = {"sex": {"M": 0.49, "F": 0.50}}
-    fitted = (
-        Recipe(df, base_weight="pw")
-        .step_calibrate(method="raking", proportions=props)
-        .prep(warn=False)
-    )
+    fitted = Recipe(df, base_weight="pw").step_calibrate(method="raking", proportions=props).prep(warn=False)
     assert fitted.diagnostics["steps"]["calibrate"]["force1"] is True
     assert fitted.diagnostics["steps"]["calibrate"]["converged"] is True
-

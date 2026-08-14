@@ -21,9 +21,9 @@ def proportions_to_margins(
 ) -> MarginDict:
     """Convert per-variable category proportions into absolute margin totals.
 
-    Each variable's proportions must be non-negative. By default (``force1=True``),
-each distribution is renormalized to sum to 1 — useful for rounded census
-targets. Set ``force1=False`` to require an exact sum of 1 (within ``atol``).
+        Each variable's proportions must be non-negative. By default (``force1=True``),
+    each distribution is renormalized to sum to 1 — useful for rounded census
+    targets. Set ``force1=False`` to require an exact sum of 1 (within ``atol``).
     """
     if total <= 0:
         raise ValueError(f"total must be positive, got {total}")
