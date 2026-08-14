@@ -8,13 +8,7 @@ Survey weighting in Python: define a sampling design, apply a weighting recipe, 
 
 ## Install
 
-```bash
-pip install weightpipe
-# or
-uv add weightpipe
-```
-
-From GitHub (latest `main`):
+Install from GitHub (latest `main`):
 
 ```bash
 pip install "git+https://github.com/sdaza/weightpipe.git"
@@ -22,7 +16,7 @@ pip install "git+https://github.com/sdaza/weightpipe.git"
 uv add "git+https://github.com/sdaza/weightpipe.git"
 ```
 
-Requires Python 3.11+.
+Requires Python 3.11+. Not published on PyPI yet.
 
 ## Quickstart
 
