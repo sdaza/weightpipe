@@ -13,6 +13,7 @@ class StepResult:
     weights: pd.Series
     factors: pd.Series
     diagnostics: dict[str, Any]
+    columns: dict[str, pd.Series] | None = None
 
 
 class Step(Protocol):

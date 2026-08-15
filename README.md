@@ -33,7 +33,7 @@ recipe = (
     .step_nonresponse(
         respondent="responded",
         method="propensity",
-        engine="logit",
+        engine="logit",  # or "gbm" / "forest"
         formula="~ region + sex",
         num_classes=5,
         cluster="hh",
@@ -42,6 +42,9 @@ recipe = (
         method="linear",
         formula="~ region + sex + age",
         totals=totals,
+        # engine="forest", population=pop_df,  # tree-embedding GREG (needs population microdata)
+        # assist="propensity",                 # add p̂ to linear calibration
+        # assist="propensity_class",           # rake/calibrate while keeping class mass
     )
     .step_trim(max_ratio=4.0, reference="median", redistribute=True)
 )
@@ -76,8 +79,8 @@ Build a recipe from a design, then chain adjustments:
 |------|----------------|
 | `step_unknown_eligibility` | Redistribute unknown eligibility within cells; optional household `cluster=` |
 | `step_drop_ineligible` | Set ineligible units to weight 0 |
-| `step_nonresponse` | Weighting-class or logit propensity adjustment; optional `cluster=` |
-| `step_calibrate` | Raking, post-stratification, or linear/GREG (`bounds=`, `calfun=`, `penalty=` supported) |
+| `step_nonresponse` | Weighting-class or propensity (`engine="logit"`, `"gbm"`, or `"forest"`); optional `cluster=` |
+| `step_calibrate` | Raking, post-stratification, or linear/GREG; `engine="forest"`/`"gbm"` for tree-embedding GREG (`population=` required); optional `assist=` |
 | `step_trim` | Cap extreme weights by ratio to median/base/value |
 | `step_trim_weights` | Automatic Tukey or Potter trimming |
 

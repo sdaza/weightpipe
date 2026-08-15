@@ -70,6 +70,7 @@ class WeightFrame:
         weights: pd.Series,
         factors: pd.Series,
         meta: dict[str, Any] | None = None,
+        columns: dict[str, pd.Series] | None = None,
     ) -> Self:
         """Return a new frame after appending one adjustment stage."""
         if step_name in self.step_names:
@@ -81,6 +82,11 @@ class WeightFrame:
         out[f"weight_{step_name}"] = weights.to_numpy()
         out[f"factor_{step_name}"] = factors.to_numpy()
         out["final_weight"] = weights.to_numpy()
+        if columns:
+            for name, series in columns.items():
+                if len(series) != len(out):
+                    raise ValueError(f"column {name!r} length must match frame rows")
+                out[name] = series.to_numpy()
         new_meta = dict(self.meta)
         if meta:
             new_meta[step_name] = meta

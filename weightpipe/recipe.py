@@ -76,6 +76,8 @@ class Recipe:
         num_classes: int | None = 5,
         weight_model: bool = True,
         cluster: str | None = None,
+        store_propensity: bool = True,
+        seed: int | None = 0,
         **kwargs: Any,
     ) -> Self:
         if kwargs:
@@ -104,6 +106,8 @@ class Recipe:
                 num_classes=num_classes,
                 weight_model=weight_model,
                 cluster=cluster,
+                store_propensity=store_propensity,
+                seed=seed,
             )
         )
 
@@ -122,6 +126,13 @@ class Recipe:
         max_iter: int = 50,
         tol: float = 1e-6,
         force1: bool = True,
+        assist: str | None = None,
+        engine: str | None = None,
+        population: Any = None,
+        include_linear: bool = True,
+        n_estimators: int = 40,
+        max_depth: int = 3,
+        seed: int | None = 0,
         **kwargs: Any,
     ) -> Self:
         if kwargs:
@@ -148,6 +159,13 @@ class Recipe:
                 max_iter=max_iter,
                 tol=tol,
                 force1=force1,
+                assist=assist,
+                engine=engine,
+                population=population,
+                include_linear=include_linear,
+                n_estimators=n_estimators,
+                max_depth=max_depth,
+                seed=seed,
             )
         )
 
@@ -251,6 +269,7 @@ class Recipe:
                 weights=res.weights,
                 factors=res.factors,
                 meta=res.diagnostics,
+                columns=res.columns,
             )
             history[f"stage_{step.name}"] = res.weights.copy()
             step_diags[step.name] = res.diagnostics

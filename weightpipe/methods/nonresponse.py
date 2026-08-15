@@ -1,15 +1,20 @@
 """Nonresponse adjustment methods."""
 
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
+from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 
 from weightpipe.frame import WeightFrame
 from weightpipe.methods.cluster_utils import assert_cluster_column, cluster_table
 from weightpipe.methods.design_matrix import design_matrix, parse_formula
 from weightpipe.steps.base import StepResult, as_logical_mask, make_cells
+
+PropensityEngine = Literal["logit", "gbm", "forest"]
+
+_PROPENSITY_ENGINES = frozenset({"logit", "gbm", "forest"})
 
 
 def weighting_class_nonresponse(
@@ -121,21 +126,83 @@ def _propensity_classes(p: np.ndarray, num_classes: int) -> np.ndarray:
     return out
 
 
-def logit_propensity_nonresponse(
+def _feature_matrix(
+    data: pd.DataFrame,
+    formula: str | list[str] | tuple[str, ...],
+    *,
+    engine: PropensityEngine,
+) -> np.ndarray:
+    x = design_matrix(data, formula)
+    if engine == "logit":
+        return x.to_numpy(dtype=float)
+    # Trees do not need an intercept column.
+    cols = [c for c in x.columns if c != "(Intercept)"]
+    if not cols:
+        raise ValueError(f"{engine} propensity needs at least one non-intercept term")
+    return x.loc[:, cols].to_numpy(dtype=float)
+
+
+def _fit_propensity(
+    x: np.ndarray,
+    y: np.ndarray,
+    sample_weight: np.ndarray,
+    *,
+    engine: PropensityEngine,
+    seed: int | None,
+) -> np.ndarray:
+    """Return clipped P(respond=1) for rows in ``x``."""
+    if len(np.unique(y)) < 2:
+        raise ValueError("propensity model needs both respondents and nonrespondents among active units")
+    rng = 0 if seed is None else int(seed)
+    if engine == "logit":
+        model = LogisticRegression(C=np.inf, solver="lbfgs", max_iter=200, fit_intercept=False)
+        model.fit(x, y, sample_weight=sample_weight)
+    elif engine == "gbm":
+        model = GradientBoostingClassifier(
+            n_estimators=80,
+            learning_rate=0.08,
+            max_depth=2,
+            random_state=rng,
+        )
+        model.fit(x, y, sample_weight=sample_weight)
+    elif engine == "forest":
+        model = RandomForestClassifier(
+            n_estimators=100,
+            max_depth=4,
+            min_samples_leaf=5,
+            random_state=rng,
+        )
+        model.fit(x, y, sample_weight=sample_weight)
+    else:
+        raise ValueError(f"unknown propensity engine: {engine!r}")
+    return np.clip(model.predict_proba(x)[:, 1], 1e-6, 1 - 1e-6)
+
+
+def propensity_nonresponse(
     weights: pd.Series,
     data: pd.DataFrame,
     *,
     respondent: str,
     formula: str | list[str] | tuple[str, ...],
+    engine: PropensityEngine = "logit",
     num_classes: int | None = 5,
     weight_model: bool = True,
     cluster: str | None = None,
-) -> tuple[pd.Series, pd.Series, dict[str, Any]]:
-    """Logistic response propensity; class adjustment or direct ``1/p`` factors.
+    store_propensity: bool = True,
+    seed: int | None = 0,
+) -> tuple[pd.Series, pd.Series, dict[str, Any], dict[str, pd.Series]]:
+    """Response propensity NR; class adjustment or direct ``1/p`` factors.
 
+    ``engine`` is ``logit``, ``gbm`` (gradient boosting), or ``forest``.
     With ``cluster``, the model is fit on one row per cluster (mean weight,
     response = all members responded) and the factor is broadcast to members.
+
+    When ``store_propensity`` is True, returns extra columns ``propensity`` and
+    (if ``num_classes`` is not None) ``propensity_class`` for later calibration.
     """
+    if engine not in _PROPENSITY_ENGINES:
+        raise ValueError(f"unknown propensity engine: {engine!r} (supports logit, gbm, forest)")
+
     terms = parse_formula(formula)
     missing = [t for t in terms if t not in data.columns]
     if missing:
@@ -150,21 +217,17 @@ def logit_propensity_nonresponse(
     factors = np.ones(n, dtype=float)
     cell_rows: list[dict[str, Any]] = []
     single_class_alert = False
+    p_full = np.full(n, np.nan, dtype=float)
+    class_full = np.full(n, np.nan, dtype=float)
 
     if cluster is None:
         idx = np.where(eligible)[0]
         if idx.size == 0:
             raise ValueError("no active units for propensity nonresponse")
-        x_all = design_matrix(data, formula)
-        x = x_all.iloc[idx].to_numpy(dtype=float)
+        x = _feature_matrix(data.iloc[idx], formula, engine=engine)
         y = respondent_mask[idx].astype(int)
         sw = w0[idx] if weight_model else np.ones(idx.size, dtype=float)
-        if len(np.unique(y)) < 2:
-            raise ValueError("propensity model needs both respondents and nonrespondents among active units")
-        model = LogisticRegression(C=np.inf, solver="lbfgs", max_iter=200, fit_intercept=False)
-        model.fit(x, y, sample_weight=sw)
-        p_hat = np.clip(model.predict_proba(x)[:, 1], 1e-6, 1 - 1e-6)
-        p_full = np.full(n, np.nan, dtype=float)
+        p_hat = _fit_propensity(x, y, sw, engine=engine, seed=seed)
         p_full[idx] = p_hat
 
         if num_classes is None:
@@ -181,8 +244,7 @@ def logit_propensity_nonresponse(
             classes = _propensity_classes(p_hat, num_classes)
             if len(np.unique(classes[classes >= 0])) <= 1:
                 single_class_alert = True
-            class_full = np.full(n, -1, dtype=int)
-            class_full[idx] = classes
+            class_full[idx] = classes.astype(float)
             for g in sorted(set(classes.tolist())):
                 if g < 0:
                     continue
@@ -221,7 +283,6 @@ def logit_propensity_nonresponse(
         )
         if tbl.empty:
             raise ValueError("no active clusters for propensity nonresponse")
-        # one representative row per cluster (first eligible member)
         cl = data[cluster].astype(str).to_numpy()
         rep_pos = []
         for h in tbl["cluster"].astype(str):
@@ -230,13 +291,10 @@ def logit_propensity_nonresponse(
         ddh = data.iloc[rep_pos].copy()
         y = tbl["flag"].astype(int).to_numpy()
         sw = tbl["weight"].to_numpy(dtype=float) if weight_model else np.ones(len(tbl))
-        if len(np.unique(y)) < 2:
-            raise ValueError("propensity model needs responding and nonresponding clusters")
-        x = design_matrix(ddh, formula).to_numpy(dtype=float)
-        model = LogisticRegression(C=np.inf, solver="lbfgs", max_iter=200, fit_intercept=False)
-        model.fit(x, y, sample_weight=sw)
-        p_hat = np.clip(model.predict_proba(x)[:, 1], 1e-6, 1 - 1e-6)
+        x = _feature_matrix(ddh, formula, engine=engine)
+        p_hat = _fit_propensity(x, y, sw, engine=engine, seed=seed)
         factor_h: dict[str, float] = {}
+        class_h: dict[str, float] = {}
         if num_classes is None:
             for h, resp, p in zip(tbl["cluster"].astype(str), tbl["flag"], p_hat, strict=True):
                 factor_h[h] = (1.0 / float(p)) if bool(resp) else 0.0
@@ -248,6 +306,8 @@ def logit_propensity_nonresponse(
             wh = tbl["weight"].to_numpy(dtype=float)
             resp_h = tbl["flag"].to_numpy(dtype=bool)
             hs = tbl["cluster"].astype(str).to_numpy()
+            for h, g in zip(hs, classes, strict=True):
+                class_h[h] = float(g)
             for g in sorted(set(classes.tolist())):
                 if g < 0:
                     continue
@@ -268,15 +328,26 @@ def logit_propensity_nonresponse(
                     }
                 )
             method_detail = f"propensity_classes_{num_classes}_household"
+        p_map = dict(zip(tbl["cluster"].astype(str), p_hat, strict=True))
         for i in idx_el:
-            f = factor_h[str(cl[i])]
-            factors[i] = f
-            new_w[i] = w0[i] * f
+            h = str(cl[i])
+            factors[i] = factor_h[h]
+            new_w[i] = w0[i] * factor_h[h]
+            p_full[i] = float(p_map[h])
+            if h in class_h:
+                class_full[i] = class_h[h]
         mean_p = float(np.mean(p_hat))
+
+    extra: dict[str, pd.Series] = {}
+    if store_propensity:
+        extra["propensity"] = pd.Series(p_full, index=weights.index, name="propensity")
+        if num_classes is not None:
+            # store as nullable Int64-friendly float with nan for inactive
+            extra["propensity_class"] = pd.Series(class_full, index=weights.index, name="propensity_class")
 
     diag: dict[str, Any] = {
         "method": "propensity",
-        "engine": "logit",
+        "engine": engine,
         "formula": formula if isinstance(formula, str) else list(formula),
         "num_classes": num_classes,
         "weight_model": weight_model,
@@ -285,12 +356,43 @@ def logit_propensity_nonresponse(
         "cells": cell_rows,
         "single_class": single_class_alert,
         "cluster": cluster,
+        "store_propensity": store_propensity,
+        "seed": seed,
     }
     return (
         pd.Series(new_w, index=weights.index, name="weights"),
         pd.Series(factors, index=weights.index, name="factors"),
         diag,
+        extra,
     )
+
+
+def logit_propensity_nonresponse(
+    weights: pd.Series,
+    data: pd.DataFrame,
+    *,
+    respondent: str,
+    formula: str | list[str] | tuple[str, ...],
+    num_classes: int | None = 5,
+    weight_model: bool = True,
+    cluster: str | None = None,
+    store_propensity: bool = True,
+    seed: int | None = 0,
+) -> tuple[pd.Series, pd.Series, dict[str, Any]]:
+    """Backward-compatible logit wrapper (no extra column dict in return)."""
+    w, f, diag, _extra = propensity_nonresponse(
+        weights,
+        data,
+        respondent=respondent,
+        formula=formula,
+        engine="logit",
+        num_classes=num_classes,
+        weight_model=weight_model,
+        cluster=cluster,
+        store_propensity=store_propensity,
+        seed=seed,
+    )
+    return w, f, diag
 
 
 def apply_weighting_class_nonresponse(
@@ -306,6 +408,33 @@ def apply_weighting_class_nonresponse(
     return StepResult(weights=weights, factors=factors, diagnostics=diag)
 
 
+def apply_propensity_nonresponse(
+    frame: WeightFrame,
+    *,
+    respondent: str,
+    formula: str | list[str] | tuple[str, ...],
+    engine: PropensityEngine = "logit",
+    num_classes: int | None = 5,
+    weight_model: bool = True,
+    cluster: str | None = None,
+    store_propensity: bool = True,
+    seed: int | None = 0,
+) -> StepResult:
+    weights, factors, diag, extra = propensity_nonresponse(
+        frame.weights,
+        frame.data,
+        respondent=respondent,
+        formula=formula,
+        engine=engine,
+        num_classes=num_classes,
+        weight_model=weight_model,
+        cluster=cluster,
+        store_propensity=store_propensity,
+        seed=seed,
+    )
+    return StepResult(weights=weights, factors=factors, diagnostics=diag, columns=extra)
+
+
 def apply_logit_propensity_nonresponse(
     frame: WeightFrame,
     *,
@@ -314,14 +443,17 @@ def apply_logit_propensity_nonresponse(
     num_classes: int | None = 5,
     weight_model: bool = True,
     cluster: str | None = None,
+    store_propensity: bool = True,
+    seed: int | None = 0,
 ) -> StepResult:
-    weights, factors, diag = logit_propensity_nonresponse(
-        frame.weights,
-        frame.data,
+    return apply_propensity_nonresponse(
+        frame,
         respondent=respondent,
         formula=formula,
+        engine="logit",
         num_classes=num_classes,
         weight_model=weight_model,
         cluster=cluster,
+        store_propensity=store_propensity,
+        seed=seed,
     )
-    return StepResult(weights=weights, factors=factors, diagnostics=diag)
