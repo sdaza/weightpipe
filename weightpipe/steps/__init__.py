@@ -186,11 +186,15 @@ class CalibrateStep:
             return
         if self.method == "raking":
             if self.assist == "propensity_class":
-                if self.proportions is not None:
-                    raise ValueError("assist='propensity_class' requires margins=, not proportions=")
-                if self.margins is None:
-                    raise ValueError("assist='propensity_class' with raking requires demographic margins=")
-                for var in self.margins:
+                if self.margins is not None and self.proportions is not None:
+                    raise ValueError("assist='propensity_class' accepts only one of margins= or proportions=")
+                if self.margins is None and self.proportions is None:
+                    raise ValueError(
+                        "assist='propensity_class' with raking requires demographic margins= or proportions="
+                    )
+                demo = self.margins if self.margins is not None else self.proportions
+                assert demo is not None
+                for var in demo:
                     if var not in frame.data.columns and var != "propensity_class":
                         raise KeyError(f"margin variable not found: {var}")
                 return

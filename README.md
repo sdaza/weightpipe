@@ -80,7 +80,7 @@ Build a recipe from a design, then chain adjustments:
 | `step_unknown_eligibility` | Redistribute unknown eligibility within cells; optional household `cluster=` |
 | `step_drop_ineligible` | Set ineligible units to weight 0 |
 | `step_nonresponse` | Weighting-class or propensity (`engine="logit"`, `"gbm"`, or `"forest"`); optional `cluster=` |
-| `step_calibrate` | Raking, post-stratification, or linear/GREG; `engine="forest"`/`"gbm"` for tree-embedding GREG (`population=` required); optional `assist=` |
+| `step_calibrate` | Raking, post-stratification, or linear/GREG; `engine="forest"`/`"gbm"` for tree-embedding GREG (`population=` required); optional `assist=` (`propensity_class` auto-converts `proportions=` → absolute `margins` before attaching class totals) |
 | `step_trim` | Cap extreme weights by ratio to median/base/value |
 | `step_trim_weights` | Automatic Tukey or Potter trimming |
 

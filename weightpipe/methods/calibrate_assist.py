@@ -9,6 +9,7 @@ import pandas as pd
 
 from weightpipe.frame import WeightFrame
 from weightpipe.methods.design_matrix import design_matrix, parse_formula
+from weightpipe.methods.raking import proportions_to_margins
 
 AssistMode = Literal["propensity", "propensity_class"]
 
@@ -46,7 +47,10 @@ def apply_calibrate_assist(
     """Return updated calibrate kwargs with propensity assist applied.
 
     - ``propensity_class``: keep current weighted class totals while matching
-      other margins (raking / poststratify / linear).
+      other demographic targets (raking / linear). With raking, demographic
+      ``proportions=`` are auto-converted to absolute ``margins=`` using
+      ``population_size`` (else the current active weight sum), then class
+      totals are attached on that same absolute scale.
     - ``propensity``: add continuous ``propensity`` to linear calibration;
       total defaults to ``population_size * mean(p)`` among active units, or
       the current weighted sum of ``propensity`` if ``population_size`` is None.
@@ -69,20 +73,40 @@ def apply_calibrate_assist(
             class_totals[str(int(g) if float(g).is_integer() else g)] = float(w[mask].sum())
 
         if method in ("raking", "poststratify"):
+            # Class totals are absolute weight mass. Raking accepts only one target
+            # style, so convert demographic proportions= → margins= on a common
+            # scale (population_size, else current active weight sum), then attach
+            # propensity_class counts.
+            if margins is not None and proportions is not None:
+                raise ValueError("assist='propensity_class' accepts only one of margins= or proportions=")
+            converted_from_proportions = False
             if proportions is not None:
-                raise ValueError("assist='propensity_class' with proportions= is not supported; use margins=")
-            new_margins = {} if margins is None else {k: dict(v) for k, v in margins.items()}
-            # Use string keys matching how raking reads the column as categories.
-            # Ensure propensity_class is stored as string-friendly categories on a working copy?
-            # Raking uses data column levels as-is; cast frame data externally in step.
+                total = float(population_size) if population_size is not None else float(w[active].sum())
+                if total <= 0:
+                    raise ValueError(
+                        "assist='propensity_class' with proportions= needs a positive "
+                        "population_size or positive post-NR weight sum"
+                    )
+                new_margins = proportions_to_margins(proportions, total=total, force1=True)
+                converted_from_proportions = True
+            elif margins is not None:
+                new_margins = {k: dict(v) for k, v in margins.items()}
+            else:
+                raise ValueError("assist='propensity_class' with raking requires demographic margins= or proportions=")
             new_margins["propensity_class"] = class_totals
+            detail: dict[str, Any] = {"propensity_class_totals": class_totals}
+            if converted_from_proportions:
+                detail["proportions_converted_to_margins"] = True
+                detail["proportions_scale_total"] = (
+                    float(population_size) if population_size is not None else float(w[active].sum())
+                )
             return {
                 "margins": new_margins,
                 "proportions": None,
                 "formula": formula,
                 "totals": totals,
                 "population_size": population_size,
-                "assist_detail": {"propensity_class_totals": class_totals},
+                "assist_detail": detail,
                 "cast_propensity_class": True,
             }
 

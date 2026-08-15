@@ -131,6 +131,80 @@ def test_propensity_assisted_raking_preserves_class_mass() -> None:
         assert float(w_fit[mask].sum()) == pytest.approx(float(w_mid[mask].sum()), rel=1e-5, abs=1e-5)
 
 
+def test_propensity_assisted_raking_autoconverts_proportions() -> None:
+    df = _nr_frame(n=150, seed=5)
+    n_target = 150.0
+    props = {"sex": {"M": 0.4, "F": 0.6}}
+    recipe = (
+        Recipe(df, base_weight="pw")
+        .step_nonresponse(
+            respondent="responded",
+            method="propensity",
+            engine="logit",
+            formula="~ region + sex",
+            num_classes=3,
+            weight_model=False,
+            seed=5,
+        )
+        .step_calibrate(
+            method="raking",
+            proportions=props,
+            population_size=n_target,
+            assist="propensity_class",
+            max_iter=100,
+        )
+    )
+    fitted = recipe.prep(min_cell_n=1, max_factor=None, warn=False)
+    cal = fitted.diagnostics["steps"]["calibrate"]
+    assert cal["assist"] == "propensity_class"
+    assert cal["proportions_converted_to_margins"] is True
+    assert cal["proportions_scale_total"] == n_target
+    assert cal["resolved_margins"]["sex"]["M"] == pytest.approx(0.4 * n_target)
+    assert cal["resolved_margins"]["sex"]["F"] == pytest.approx(0.6 * n_target)
+
+    # Same as hand-converting proportions → margins, then assisting.
+    manual = (
+        Recipe(df, base_weight="pw")
+        .step_nonresponse(
+            respondent="responded",
+            method="propensity",
+            engine="logit",
+            formula="~ region + sex",
+            num_classes=3,
+            weight_model=False,
+            seed=5,
+        )
+        .step_calibrate(
+            method="raking",
+            margins={var: {k: v * n_target for k, v in d.items()} for var, d in props.items()},
+            assist="propensity_class",
+            max_iter=100,
+        )
+        .prep(min_cell_n=1, max_factor=None, warn=False)
+    )
+    np.testing.assert_allclose(fitted.weights.to_numpy(), manual.weights.to_numpy(), rtol=0, atol=1e-10)
+
+    mid = (
+        Recipe(df, base_weight="pw")
+        .step_nonresponse(
+            respondent="responded",
+            method="propensity",
+            engine="logit",
+            formula="~ region + sex",
+            num_classes=3,
+            weight_model=False,
+            seed=5,
+        )
+        .prep(min_cell_n=1, max_factor=None, warn=False)
+    )
+    cls = mid.frame.data["propensity_class"]
+    w_mid = mid.weights.to_numpy(dtype=float)
+    w_fit = fitted.weights.to_numpy(dtype=float)
+    for g in pd.unique(cls.dropna()):
+        mask = cls == g
+        assert float(w_fit[mask].sum()) == pytest.approx(float(w_mid[mask].sum()), rel=1e-5, abs=1e-5)
+
+
 def test_propensity_assisted_linear() -> None:
     df = _nr_frame(n=100, seed=4)
     pop = pd.DataFrame(
