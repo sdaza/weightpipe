@@ -8,7 +8,8 @@ import pandas as pd
 from weightpipe.design import Design
 from weightpipe.estimate import estimate as _estimate
 from weightpipe.recipe import Recipe
-from weightpipe.result import WeightResult, collect_weights as _collect_weights
+from weightpipe.result import WeightResult
+from weightpipe.result import collect_weights as _collect_weights
 
 
 class WeightPipe:
