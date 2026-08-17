@@ -2,7 +2,7 @@
 
 from weightpipe._logging import set_log_level, setup_logging
 from weightpipe.design import Design
-from weightpipe.diagnostics import design_effect, ess
+from weightpipe.diagnostics import design_effect, ess, margins
 from weightpipe.estimate import estimate, point_estimate
 from weightpipe.frame import WeightFrame
 from weightpipe.methods import design_matrix, population_totals
@@ -66,6 +66,7 @@ __all__ = [
     "jackknife_estimate",
     "jackknife_weights",
     "margin_of_error",
+    "margins",
     "point_estimate",
     "population_totals",
     "sample_size",

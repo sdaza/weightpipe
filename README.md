@@ -97,6 +97,15 @@ Chain adjustments on a pipe, in order:
 | `trim` | Cap extreme weights by ratio to median/base/value |
 | `trim_weights` | Automatic Tukey or Potter trimming |
 
+After calibrate, step diagnostics include a tidy `margin_table` (target vs achieved). You can also check weighted category margins anytime:
+
+```python
+pipe.margins("sex")  # current weighted totals / proportions
+pipe.margins(targets="calibrate")  # reuse last calibrate targets
+pipe.margins("sex", proportions={"sex": {"M": 0.5, "F": 0.5}})
+pipe.diagnostics["steps"]["calibrate"]["margin_table"]
+```
+
 ## Estimation
 
 ```python

@@ -321,13 +321,16 @@ class CalibrateStep:
         if assist_diag:
             diag = dict(res.diagnostics)
             diag.update(assist_diag)
-            return StepResult(
-                weights=res.weights,
-                factors=res.factors,
-                diagnostics=diag,
-                columns=res.columns,
-            )
-        return res
+        else:
+            diag = dict(res.diagnostics)
+        from weightpipe.diagnostics.margins import attach_margin_table
+
+        return StepResult(
+            weights=res.weights,
+            factors=res.factors,
+            diagnostics=attach_margin_table(diag),
+            columns=res.columns,
+        )
 
     def to_dict(self) -> dict[str, Any]:
         return {

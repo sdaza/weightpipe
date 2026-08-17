@@ -6,6 +6,7 @@ from typing import Any, Self
 import pandas as pd
 
 from weightpipe.design import Design
+from weightpipe.diagnostics.margins import margins as _margins
 from weightpipe.estimate import estimate as _estimate
 from weightpipe.recipe import Recipe
 from weightpipe.result import WeightResult
@@ -156,6 +157,31 @@ class WeightPipe:
     def collect_weights(self, **kwargs: Any) -> pd.DataFrame:
         """Weights (and optional intermediates) as a tidy frame."""
         return _collect_weights(self.result, **kwargs)
+
+    def margins(
+        self,
+        variables: str | Sequence[str] | None = None,
+        *,
+        margins: dict[str, dict[str, float]] | None = None,
+        proportions: dict[str, dict[str, float]] | None = None,
+        population_size: float | None = None,
+        targets: str | None = None,
+        force1: bool = True,
+    ) -> pd.DataFrame:
+        """Current weighted category margins, optionally vs targets.
+
+        Call anytime after fit. Pass ``targets='calibrate'`` to reuse the last
+        calibrate step's targets, or pass ``margins=`` / ``proportions=``.
+        """
+        return _margins(
+            self.result,
+            variables,
+            margins=margins,
+            proportions=proportions,
+            population_size=population_size,
+            targets=targets,  # type: ignore[arg-type]
+            force1=force1,
+        )
 
     def estimate(self, variable: str, **kwargs: Any) -> pd.DataFrame:
         """Estimate with recipe-aware bootstrap or jackknife variance."""

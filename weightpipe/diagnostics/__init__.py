@@ -3,7 +3,22 @@
 import numpy as np
 import pandas as pd
 
+from weightpipe.diagnostics.margins import (
+    attach_margin_table,
+    margin_table_from_targets,
+    margins,
+    weighted_category_margins,
+)
 from weightpipe.result import WeightResult
+
+__all__ = [
+    "attach_margin_table",
+    "design_effect",
+    "ess",
+    "margin_table_from_targets",
+    "margins",
+    "weighted_category_margins",
+]
 
 
 def design_effect(weights: pd.Series | WeightResult) -> float:
