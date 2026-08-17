@@ -1,5 +1,7 @@
 """Tests for Design helpers and estimate()."""
 
+import logging
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -46,9 +48,20 @@ def test_design_infers_kind_from_inputs() -> None:
     assert Design(df, weight="pw", psu="psu", strata="region").kind == "stratified_cluster"
 
 
+def test_design_defaults_to_unit_weights(caplog: pytest.LogCaptureFixture) -> None:
+    df = pd.DataFrame({"y": [1.0, 2.0, 3.0]})
+    with caplog.at_level(logging.INFO, logger="weightpipe"):
+        design = Design(df)
+    assert "No design weight provided; using base_weight=1.0" in caplog.text
+    assert design.kind == "custom"
+    assert design.weight == "base_weight"
+    assert design.meta.get("unit_weights") is True
+    np.testing.assert_allclose(design.data["base_weight"].to_numpy(), np.ones(3))
+
+
 def test_design_rejects_ambiguous_inputs() -> None:
     df = pd.DataFrame({"region": ["N", "S"], "pw": [1.0, 2.0]})
-    with pytest.raises(ValueError, match="exactly one"):
+    with pytest.raises(ValueError, match="at most one"):
         Design(df, N=10, weight="pw")
     with pytest.raises(ValueError, match="N_h= requires strata"):
         Design(df, N_h={"N": 5, "S": 5})

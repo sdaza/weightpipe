@@ -7,6 +7,10 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from weightpipe._logging import get_logger
+
+logger = get_logger(__name__)
+
 
 def _as_col_list(value: str | Sequence[str] | None) -> list[str] | None:
     if value is None:
@@ -68,6 +72,7 @@ class Design:
 
     Pass the inputs that define the design; ``kind`` is inferred:
 
+    - *(none)* → unit weights ``1`` (with a log message)
     - ``N=...`` → SRS, weights ``N/n``
     - ``strata=...``, ``N_h=...`` → stratified SRS, weights ``N_h/n_h``
     - ``weight=...``, ``psu=...`` → cluster (add ``strata=`` if stratified)
@@ -104,8 +109,9 @@ class Design:
         prob_cols = _as_col_list(probabilities)
         stage_cols = _as_col_list(stage_weights)
         sources = (N, N_h, weight, prob_cols, stage_cols)
-        if sum(x is not None for x in sources) != 1:
-            raise ValueError("provide exactly one of N=, N_h=, weight=, probabilities=, or stage_weights=")
+        n_sources = sum(x is not None for x in sources)
+        if n_sources > 1:
+            raise ValueError("provide at most one of N=, N_h=, weight=, probabilities=, or stage_weights=")
         if N is not None and (strata is not None or psu is not None):
             raise ValueError("N= (SRS) cannot be combined with strata= or psu=")
         if N_h is not None and strata is None:
@@ -128,7 +134,16 @@ class Design:
             psu=psu,
         )
 
-        if N is not None:
+        if n_sources == 0:
+            weight_col = "base_weight"
+            if len(frame) < 1:
+                raise ValueError("data must have at least one row")
+            if weight_col in frame.columns:
+                raise ValueError(f"column {weight_col!r} already exists")
+            frame = frame.assign(**{weight_col: 1.0})
+            meta = {"unit_weights": True, "note": "no design weight provided; using 1.0"}
+            logger.info("No design weight provided; using base_weight=1.0 for all rows")
+        elif N is not None:
             weight_col = "base_weight"
             n = len(frame)
             if n < 1:

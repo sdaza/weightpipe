@@ -72,6 +72,7 @@ Each step returns a new pipe, so you can branch from a common base and compare.
 Pass the sampling inputs; the design type is inferred automatically.
 
 ```python
+WeightPipe(df)                                            # no weight → base_weight=1 (logged)
 WeightPipe(df, N=10_000)                                  # SRS: w = N / n
 WeightPipe(df, strata="region", N_h={"North": 5000, ...}) # stratified SRS: w = N_h / n_h
 WeightPipe(df, weight="pw", psu="psu")                    # cluster
@@ -135,6 +136,19 @@ pipe = WeightPipe(df, strata="region", N_h=populations)
 ```
 
 Allocation methods: `mixed`, `root`, `neyman`, `stdev`, and `error`.
+
+## Logging
+
+weightpipe stays silent unless you ask for messages. Turn them on to see notes such as a missing design weight:
+
+```python
+import weightpipe as wp
+
+wp.setup_logging("INFO")  # 2026-08-17 12:03:13  No design weight provided; ...
+wp.set_log_level("WARNING")  # quieter
+```
+
+Messages go to `stderr` through the `weightpipe` logger, so your own logging config keeps working if you'd rather configure it yourself.
 
 ## Lower-level API
 

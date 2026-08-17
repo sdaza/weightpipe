@@ -1,5 +1,6 @@
 """weightpipe: declarative survey weighting with recipe-aware replicates."""
 
+from weightpipe._logging import set_log_level, setup_logging
 from weightpipe.design import Design
 from weightpipe.diagnostics import design_effect, ess
 from weightpipe.estimate import estimate, point_estimate
@@ -68,6 +69,8 @@ __all__ = [
     "point_estimate",
     "population_totals",
     "sample_size",
+    "set_log_level",
+    "setup_logging",
     "stratified_margin_of_error",
     "weight_factors",
 ]

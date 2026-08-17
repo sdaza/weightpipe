@@ -1,5 +1,7 @@
 """WeightPipe facade: design inputs, chained steps, lazy fit, estimation."""
 
+import logging
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -97,6 +99,15 @@ def test_options_forwards_prep_arguments(cluster_df: pd.DataFrame) -> None:
     assert fitted.diagnostics["max_factor"] is None
 
 
+def test_pipe_defaults_to_unit_weights(caplog: pytest.LogCaptureFixture) -> None:
+    df = pd.DataFrame({"y": [1.0, 2.0, 3.0, 4.0]})
+    with caplog.at_level(logging.INFO, logger="weightpipe"):
+        pipe = WeightPipe(df)
+    assert "No design weight provided; using base_weight=1.0" in caplog.text
+    assert pipe.kind == "custom"
+    np.testing.assert_allclose(pipe.weights.to_numpy(), np.ones(4))
+
+
 def test_pipe_requires_one_design_source(cluster_df: pd.DataFrame) -> None:
-    with pytest.raises(ValueError, match="exactly one"):
+    with pytest.raises(ValueError, match="at most one"):
         WeightPipe(cluster_df, weight="pw", N=100)
