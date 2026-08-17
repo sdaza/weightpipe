@@ -79,7 +79,7 @@ def test_table_and_diagnostics(cluster_df: pd.DataFrame) -> None:
     pipe = WeightPipe(cluster_df, weight="pw", psu="psu", strata="stratum").calibrate(
         method="poststratify", margins={"sex": {"M": 60.0, "F": 40.0}}
     )
-    tbl = pipe.table(keep_intermediate=True)
+    tbl = pipe.collect_weights(keep_intermediate=True)
     assert isinstance(tbl, pd.DataFrame)
     assert "weight" in tbl.columns
     np.testing.assert_allclose(

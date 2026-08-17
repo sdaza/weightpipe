@@ -34,7 +34,7 @@ df_st = pd.DataFrame(
     }
 )
 pipe_st = WeightPipe(df_st, strata="stratum", N_h={"North": 40, "South": 90})
-print(pipe_st.table().groupby("stratum")["weight"].first())
+print(pipe_st.collect_weights().groupby("stratum")["weight"].first())
 pipe_st.estimate("y", estimand="mean", replicates=100, seed=2)
 
 # %%
@@ -50,7 +50,7 @@ df_cl = pd.DataFrame(
     }
 )
 pipe_cl = WeightPipe(df_cl, weight="pw", psu="psu", strata="stratum")
-print(pipe_cl.table().head())
+print(pipe_cl.collect_weights().head())
 
 # %%
 print("mean")

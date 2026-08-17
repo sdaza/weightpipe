@@ -51,7 +51,7 @@ pipe = (
 )
 
 pipe.weights  # final weights
-pipe.table(keep_intermediate=True)  # weights and per-step factors
+pipe.collect_weights(keep_intermediate=True)  # weights and per-step factors
 pipe.diagnostics  # per-step diagnostics and alerts
 
 pipe.estimate("y", estimand="mean", variance="jackknife")

@@ -8,7 +8,7 @@ import pandas as pd
 from weightpipe.design import Design
 from weightpipe.estimate import estimate as _estimate
 from weightpipe.recipe import Recipe
-from weightpipe.result import WeightResult, collect_weights
+from weightpipe.result import WeightResult, collect_weights as _collect_weights
 
 
 class WeightPipe:
@@ -152,9 +152,9 @@ class WeightPipe:
     def alerts(self) -> tuple[str, ...]:
         return self.result.alerts
 
-    def table(self, **kwargs: Any) -> pd.DataFrame:
+    def collect_weights(self, **kwargs: Any) -> pd.DataFrame:
         """Weights (and optional intermediates) as a tidy frame."""
-        return collect_weights(self.result, **kwargs)
+        return _collect_weights(self.result, **kwargs)
 
     def estimate(self, variable: str, **kwargs: Any) -> pd.DataFrame:
         """Estimate with recipe-aware bootstrap or jackknife variance."""

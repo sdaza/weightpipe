@@ -51,7 +51,7 @@ pipe = (
 pipe
 
 # %%
-weighted = pipe.table(keep_intermediate=True, drop_zero=True)
+weighted = pipe.collect_weights(keep_intermediate=True, drop_zero=True)
 
 # %%
 print("active units =", len(weighted))

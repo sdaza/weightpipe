@@ -24,7 +24,7 @@ df
 # %%
 # One object: sampling inputs + (optional) steps. Weights compute on first use.
 pipe = WeightPipe(df, weight="pw", psu="psu", strata="stratum")
-out = pipe.table()
+out = pipe.collect_weights()
 print("n =", len(out), "sum(w) =", round(float(out["weight"].sum()), 3))
 print("Kish deff =", round(design_effect(pipe.result), 3))
 out

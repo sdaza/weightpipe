@@ -58,7 +58,7 @@ pipe = (
     # .calibrate(..., penalty=10.0)
     # .trim_weights(method="tukey")
 )
-print(pipe.table().head())
+print(pipe.collect_weights().head())
 print("steps:", pipe.diagnostics["steps_applied"])
 
 # %%
