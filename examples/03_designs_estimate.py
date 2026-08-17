@@ -1,5 +1,5 @@
 # %% [markdown]
-# Sampling designs + estimate() — mean / proportion / total with SE/CI
+# Sampling designs + estimate — mean / proportion / total / ratio / median
 #
 # Open in Cursor/VS Code and use **Run Cell** on each `# %%` block.
 # Or: `uv run python examples/03_designs_estimate.py`
@@ -7,7 +7,7 @@
 # %%
 import pandas as pd
 
-from weightpipe import Design, Recipe, collect_weights, estimate
+from weightpipe import WeightPipe
 
 # %%
 # --- SRS: base weight = N / n ---
@@ -17,13 +17,12 @@ df_srs = pd.DataFrame(
         "employed": [1, 0, 1, 1, 0, 1],
     }
 )
-design_srs = Design(df_srs, N=600)
-recipe_srs = Recipe.from_design(design_srs)
-print("SRS weights:", design_srs.data[design_srs.weight].unique())
-estimate(recipe_srs, "y", estimand="mean", replicates=100, seed=1)
+pipe_srs = WeightPipe(df_srs, N=600)
+print("kind:", pipe_srs.kind, "weights:", pipe_srs.weights.unique())
+pipe_srs.estimate("y", estimand="mean", replicates=100, seed=1)
 
 # %%
-estimate(recipe_srs, "employed", estimand="proportion", replicates=100, seed=1)
+pipe_srs.estimate("employed", estimand="proportion", replicates=100, seed=1)
 
 # %%
 # --- Stratified SRS: w = N_h / n_h ---
@@ -34,10 +33,9 @@ df_st = pd.DataFrame(
         "employed": [1, 1, 0, 1, 0, 1, 1, 0, 1, 1],
     }
 )
-design_st = Design(df_st, strata="stratum", N_h={"North": 40, "South": 90})
-recipe_st = Recipe.from_design(design_st)
-print(design_st.data.groupby("stratum")[design_st.weight].first())
-estimate(recipe_st, "y", estimand="mean", replicates=100, seed=2)
+pipe_st = WeightPipe(df_st, strata="stratum", N_h={"North": 40, "South": 90})
+print(pipe_st.table().groupby("stratum")["weight"].first())
+pipe_st.estimate("y", estimand="mean", replicates=100, seed=2)
 
 # %%
 # --- Cluster / multi-stage: supply design weights; declare psu (+ optional strata) ---
@@ -51,40 +49,26 @@ df_cl = pd.DataFrame(
         "pw": [2.0, 2.0, 2.5, 2.5, 3.0, 3.0, 1.5, 1.5],
     }
 )
-design_cl = Design(df_cl, weight="pw", psu="psu", strata="stratum")
-recipe_cl = (
-    Recipe.from_design(design_cl)
-    # optional adjustments still compose on top of design weights
-)
-
-fitted = recipe_cl.prep()
-print(collect_weights(fitted).head())
+pipe_cl = WeightPipe(df_cl, weight="pw", psu="psu", strata="stratum")
+print(pipe_cl.table().head())
 
 # %%
 print("mean")
-print(estimate(recipe_cl, "y", estimand="mean", fitted=fitted, replicates=100, seed=3).round(3).to_string(index=False))
+print(pipe_cl.estimate("y", estimand="mean", replicates=100, seed=3).round(3).to_string(index=False))
 print("proportion employed")
-print(
-    estimate(recipe_cl, "employed", estimand="proportion", fitted=fitted, replicates=100, seed=3)
-    .round(3)
-    .to_string(index=False)
-)
+print(pipe_cl.estimate("employed", estimand="proportion", replicates=100, seed=3).round(3).to_string(index=False))
 print("total y")
-print(estimate(recipe_cl, "y", estimand="total", fitted=fitted, replicates=100, seed=3).round(3).to_string(index=False))
+print(pipe_cl.estimate("y", estimand="total", replicates=100, seed=3).round(3).to_string(index=False))
 
 # %%
 print("ratio y/x (jackknife)")
 print(
-    estimate(recipe_cl, "y", estimand="ratio", denominator="x", fitted=fitted, variance="jackknife")
+    pipe_cl.estimate("y", estimand="ratio", denominator="x", variance="jackknife")
     .round(3)
     .to_string(index=False)
 )
 print("median y (jackknife)")
-print(
-    estimate(recipe_cl, "y", estimand="median", fitted=fitted, variance="jackknife")
-    .round(3)
-    .to_string(index=False)
-)
+print(pipe_cl.estimate("y", estimand="median", variance="jackknife").round(3).to_string(index=False))
 
 # %%
 # --- Multi-stage from inclusion probabilities: w = 1/(p1*p2); psu = ultimate cluster ---
@@ -97,11 +81,7 @@ df_ms = pd.DataFrame(
         "y": [10.0, 12.0, 20.0, 22.0, 11.0, 13.0, 21.0, 23.0],
     }
 )
-design_ms = Design(df_ms, probabilities=["p1", "p2"], psu="psu", strata="stratum")
-print("multistage kind:", design_ms.kind)
-print("weights:", design_ms.data[design_ms.weight].tolist())
-print(
-    estimate(Recipe.from_design(design_ms), "y", estimand="mean", variance="jackknife")
-    .round(3)
-    .to_string(index=False)
-)
+pipe_ms = WeightPipe(df_ms, probabilities=["p1", "p2"], psu="psu", strata="stratum")
+print("multistage kind:", pipe_ms.kind)
+print("weights:", pipe_ms.weights.tolist())
+print(pipe_ms.estimate("y", estimand="mean", variance="jackknife").round(3).to_string(index=False))

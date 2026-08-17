@@ -1,5 +1,5 @@
 # %% [markdown]
-# Minimal recipe — base weights + bootstrap SE/CI
+# Minimal WeightPipe — base weights + bootstrap SE/CI
 #
 # Open in Cursor/VS Code and use **Run Cell** on each `# %%` block.
 # Or: `uv run python examples/01_minimal_recipe.py`
@@ -7,14 +7,7 @@
 # %%
 import pandas as pd
 
-from weightpipe import (
-    Recipe,
-    boot_mean,
-    boot_total,
-    bootstrap_weights,
-    collect_weights,
-    design_effect,
-)
+from weightpipe import WeightPipe, design_effect
 
 # %%
 # Toy sample
@@ -29,21 +22,14 @@ df = pd.DataFrame(
 df
 
 # %%
-# Define inert recipe and prep (base weights only)
-recipe = Recipe(df, base_weight="pw")
-fitted = recipe.prep()
-out = collect_weights(fitted)
+# One object: sampling inputs + (optional) steps. Weights compute on first use.
+pipe = WeightPipe(df, weight="pw", psu="psu", strata="stratum")
+out = pipe.table()
 print("n =", len(out), "sum(w) =", round(float(out["weight"].sum()), 3))
-print("Kish deff =", round(design_effect(fitted), 3))
+print("Kish deff =", round(design_effect(pipe.result), 3))
 out
 
 # %%
-# Recipe-aware bootstrap: SE and 95% CI for mean and total
-boot = bootstrap_weights(recipe, replicates=200, strata="stratum", psu="psu", seed=1)
-mean_ci = boot_mean(boot, "y")
-total_ci = boot_total(boot, "y")
-print("boot_mean(y)")
-print(mean_ci.round(3).to_string(index=False))
-print("boot_total(y)")
-print(total_ci.round(3).to_string(index=False))
-mean_ci
+# Estimate with recipe-aware bootstrap SE/CI
+print(pipe.estimate("y", estimand="mean", variance="bootstrap", replicates=200, seed=1).round(3).to_string(index=False))
+print(pipe.estimate("y", estimand="total", variance="bootstrap", replicates=200, seed=1).round(3).to_string(index=False))

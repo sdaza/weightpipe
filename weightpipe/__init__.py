@@ -5,6 +5,7 @@ from weightpipe.diagnostics import design_effect, ess
 from weightpipe.estimate import estimate, point_estimate
 from weightpipe.frame import WeightFrame
 from weightpipe.methods import design_matrix, population_totals
+from weightpipe.pipeline import WeightPipe
 from weightpipe.planning import (
     allocate_strata,
     allocation_table,
@@ -39,6 +40,7 @@ __all__ = [
     "JackknifeResult",
     "Recipe",
     "WeightFrame",
+    "WeightPipe",
     "WeightResult",
     "__version__",
     "allocate_strata",

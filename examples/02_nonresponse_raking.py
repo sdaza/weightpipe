@@ -1,5 +1,5 @@
 # %% [markdown]
-# Nonresponse + raking (proportions) + bootstrap SE/CI
+# Nonresponse + raking + estimate SE/CI
 #
 # Open in Cursor/VS Code and use **Run Cell** on each `# %%` block.
 # Or: `uv run python examples/02_nonresponse_raking.py`
@@ -7,15 +7,7 @@
 # %%
 import pandas as pd
 
-from weightpipe import (
-    Recipe,
-    boot_mean,
-    boot_total,
-    bootstrap_weights,
-    collect_weights,
-    design_effect,
-    weight_factors,
-)
+from weightpipe import WeightPipe, design_effect, weight_factors
 
 # %%
 # Toy survey microdata
@@ -42,12 +34,13 @@ proportions = {
 proportions
 
 # %%
-# Build inert recipe (nothing computed yet)
-recipe = (
-    Recipe(df, base_weight="pw")
-    .step_drop_ineligible(ineligible="ineligible")
-    .step_nonresponse(respondent="responded", method="weighting_class", by=["region"])
-    .step_calibrate(
+# Chain adjustments on one pipe (nothing computed until weights / estimate)
+pipe = (
+    WeightPipe(df, weight="pw", psu="psu", strata="stratum")
+    .options(min_cell_n=1, max_factor=None, warn=False)
+    .drop_ineligible(ineligible="ineligible")
+    .nonresponse(respondent="responded", method="weighting_class", by=["region"])
+    .calibrate(
         method="raking",
         proportions=proportions,
         # population_size=80.0,  # optional absolute N; default = sum(active weights)
@@ -55,36 +48,27 @@ recipe = (
         tol=1e-6,
     )
 )
-recipe.to_dict()
+pipe
 
 # %%
-# prep() estimates the cascade; collect_weights() returns a DataFrame
-fitted = recipe.prep(min_cell_n=1, max_factor=None, warn=False)
-weighted = collect_weights(fitted, keep_intermediate=True, drop_zero=True)
+weighted = pipe.table(keep_intermediate=True, drop_zero=True)
 
 # %%
 print("active units =", len(weighted))
 print("sum(weight) =", round(float(weighted["weight"].sum()), 3))
-print("Kish deff =", round(design_effect(fitted), 3))
-print("alerts =", fitted.alerts)
-print("factor columns:", list(weight_factors(fitted).columns))
-calib = fitted.diagnostics["steps"]["calibrate"]
+print("Kish deff =", round(design_effect(pipe.result), 3))
+print("alerts =", pipe.alerts)
+print("factor columns:", list(weight_factors(pipe.result).columns))
+calib = pipe.diagnostics["steps"]["calibrate"]
 print("raking total_source =", calib.get("total_source"), "total =", calib.get("total"))
 weighted
 
 # %%
 # Stage adjustment factors
-factors = weight_factors(fitted)
+factors = weight_factors(pipe.result)
 factors
 
 # %%
-# Recipe-aware bootstrap SE/CI (re-runs full recipe per replicate)
-boot = bootstrap_weights(
-    recipe, replicates=100, strata="stratum", psu="psu", seed=42, point=fitted
-)
-mean_ci = boot_mean(boot, "y")
-total_ci = boot_total(boot, "y")
-print("boot_mean(y)")
-print(mean_ci.round(3).to_string(index=False))
-print("boot_total(y)")
-print(total_ci.round(3).to_string(index=False))
+# Recipe-aware bootstrap SE/CI
+print(pipe.estimate("y", estimand="mean", variance="bootstrap", replicates=100, seed=42).round(3).to_string(index=False))
+print(pipe.estimate("y", estimand="total", variance="bootstrap", replicates=100, seed=42).round(3).to_string(index=False))

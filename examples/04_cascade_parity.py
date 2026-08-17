@@ -5,7 +5,7 @@
 import numpy as np
 import pandas as pd
 
-from weightpipe import Design, Recipe, collect_weights, estimate, population_totals
+from weightpipe import WeightPipe, population_totals
 
 # %%
 rng = np.random.default_rng(7)
@@ -29,7 +29,6 @@ df = pd.DataFrame(
 df.loc[0, "responded"] = 1
 df.loc[1, "responded"] = 0
 
-design = Design(df, weight="pw", psu="psu", strata="stratum")
 pop = pd.DataFrame(
     {
         "region": ["North"] * 200 + ["South"] * 200,
@@ -39,11 +38,12 @@ pop = pd.DataFrame(
 )
 totals = population_totals(pop, "~ region + sex + age")
 
-recipe = (
-    Recipe.from_design(design)
-    .step_unknown_eligibility(unknown="unknown", by=["region"])
-    .step_drop_ineligible(ineligible="ineligible")
-    .step_nonresponse(
+pipe = (
+    WeightPipe(df, weight="pw", psu="psu", strata="stratum")
+    .options(min_cell_n=5, max_factor=5.0, warn=False)
+    .unknown_eligibility(unknown="unknown", by=["region"])
+    .drop_ineligible(ineligible="ineligible")
+    .nonresponse(
         respondent="responded",
         method="propensity",
         engine="logit",
@@ -51,29 +51,28 @@ recipe = (
         num_classes=4,
         weight_model=True,
     )
-    .step_calibrate(method="linear", formula="~ region + sex + age", totals=totals)
-    .step_trim(max_ratio=4.0, reference="median", redistribute=True)
+    .calibrate(method="linear", formula="~ region + sex + age", totals=totals)
+    .trim(max_ratio=4.0, reference="median", redistribute=True)
     # Alternatives:
-    # .step_calibrate(..., bounds=(0.3, 3.0))
-    # .step_calibrate(..., penalty=10.0)
-    # .step_trim_weights(method="tukey")
+    # .calibrate(..., bounds=(0.3, 3.0))
+    # .calibrate(..., penalty=10.0)
+    # .trim_weights(method="tukey")
 )
-fitted = recipe.prep(min_cell_n=5, max_factor=5.0, warn=False)
-print(collect_weights(fitted).head())
-print("ESS-ish n / deff path done; steps:", fitted.diagnostics["steps_applied"])
+print(pipe.table().head())
+print("steps:", pipe.diagnostics["steps_applied"])
 
 # %%
 print("bootstrap mean")
 print(
-    estimate(recipe, "y", estimand="mean", fitted=fitted, variance="bootstrap", replicates=80, seed=1)
+    pipe.estimate("y", estimand="mean", variance="bootstrap", replicates=80, seed=1)
     .round(3)
     .to_string(index=False)
 )
 print("jackknife mean")
-print(estimate(recipe, "y", estimand="mean", fitted=fitted, variance="jackknife").round(3).to_string(index=False))
+print(pipe.estimate("y", estimand="mean", variance="jackknife").round(3).to_string(index=False))
 print("jackknife proportion employed")
 print(
-    estimate(recipe, "employed", estimand="proportion", fitted=fitted, variance="jackknife")
+    pipe.estimate("employed", estimand="proportion", variance="jackknife")
     .round(3)
     .to_string(index=False)
 )
