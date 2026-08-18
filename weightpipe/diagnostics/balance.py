@@ -304,9 +304,7 @@ def balance(
     }
 
     if target is not None:
-        target_means, pop_sds, target_props = _target_from_population(
-            target, covs, target_weight=target_weight
-        )
+        target_means, pop_sds, target_props = _target_from_population(target, covs, target_weight=target_weight)
         for k, v in pop_sds.items():
             target_sds.setdefault(k, v)
 
@@ -322,9 +320,7 @@ def balance(
             else:
                 m_ref = _weighted_mean(x, w_b)
                 sd = float(np.sqrt(max(_weighted_var(x, w_b, m_ref), 0.0)))
-            rows.append(
-                _continuous_row(name, x, w_b, w_a, float(target_means[name]), sd, threshold)
-            )
+            rows.append(_continuous_row(name, x, w_b, w_a, float(target_means[name]), sd, threshold))
         else:
             if name not in target_props:
                 # Infer categorical targets only when proportions were supplied
@@ -337,11 +333,7 @@ def balance(
     if not table.empty:
         var_order = {v: i for i, v in enumerate(covs)}
         table["_vo"] = table["variable"].map(var_order)
-        table = (
-            table.sort_values(["_vo", "type", "level"], kind="mergesort")
-            .drop(columns="_vo")
-            .reset_index(drop=True)
-        )
+        table = table.sort_values(["_vo", "type", "level"], kind="mergesort").drop(columns="_vo").reset_index(drop=True)
 
     abs_after = table["abs_smd_after"] if not table.empty else pd.Series(dtype=float)
     abs_before = table["abs_smd_before"] if not table.empty else pd.Series(dtype=float)

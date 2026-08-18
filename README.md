@@ -114,8 +114,8 @@ report = pipe.balance(
     means={"age": 40.0},
     proportions={"sex": {"M": 0.5, "F": 0.5}, "region": {"N": 0.5, "S": 0.5}},
 )
-report.table          # before / after / target / smd_* / balanced
-report.summary        # max |SMD|, n_imbalanced, ESS before/after
+report.table  # before / after / target / smd_* / balanced
+report.summary  # max |SMD|, n_imbalanced, ESS before/after
 # or: pipe.balance(["age", "sex"], target=pop_df, target_weight="N")
 ```
 
