@@ -6,6 +6,8 @@ from typing import Any, Self
 import pandas as pd
 
 from weightpipe.design import Design
+from weightpipe.diagnostics.balance import BalanceReport
+from weightpipe.diagnostics.balance import balance as _balance
 from weightpipe.diagnostics.margins import margins as _margins
 from weightpipe.estimate import estimate as _estimate
 from weightpipe.recipe import Recipe
@@ -181,6 +183,35 @@ class WeightPipe:
             population_size=population_size,
             targets=targets,  # type: ignore[arg-type]
             force1=force1,
+        )
+
+    def balance(
+        self,
+        covariates: str | Sequence[str],
+        *,
+        target: pd.DataFrame | None = None,
+        target_weight: str | None = None,
+        means: dict[str, float] | None = None,
+        proportions: dict[str, dict[str, float]] | None = None,
+        sds: dict[str, float] | None = None,
+        before: pd.Series | str | None = "base",
+        threshold: float = 0.1,
+    ) -> BalanceReport:
+        """Covariate balance before vs after weighting (SMD / ASMD).
+
+        Pass population microdata via ``target=``, or explicit ``means`` /
+        ``proportions``. Compare base weights to final weights by default.
+        """
+        return _balance(
+            self.result,
+            covariates,
+            target=target,
+            target_weight=target_weight,
+            means=means,
+            proportions=proportions,
+            sds=sds,
+            before=before,  # type: ignore[arg-type]
+            threshold=threshold,
         )
 
     def estimate(self, variable: str, **kwargs: Any) -> pd.DataFrame:

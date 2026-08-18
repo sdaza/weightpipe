@@ -106,6 +106,19 @@ pipe.margins("sex", proportions={"sex": {"M": 0.5, "F": 0.5}})
 pipe.diagnostics["steps"]["calibrate"]["margin_table"]
 ```
 
+Covariate **balance** compares base vs final weights to population targets via standardized mean differences (SMD), for continuous and categorical covariates:
+
+```python
+report = pipe.balance(
+    ["age", "sex", "region"],
+    means={"age": 40.0},
+    proportions={"sex": {"M": 0.5, "F": 0.5}, "region": {"N": 0.5, "S": 0.5}},
+)
+report.table          # before / after / target / smd_* / balanced
+report.summary        # max |SMD|, n_imbalanced, ESS before/after
+# or: pipe.balance(["age", "sex"], target=pop_df, target_weight="N")
+```
+
 ## Estimation
 
 ```python
@@ -180,6 +193,7 @@ Interactive scripts (run cell-by-cell or with Python):
 - [`examples/02_nonresponse_raking.py`](examples/02_nonresponse_raking.py) — NR + raking
 - [`examples/03_designs_estimate.py`](examples/03_designs_estimate.py) — SRS / stratified / cluster / multi-stage
 - [`examples/04_cascade_parity.py`](examples/04_cascade_parity.py) — full cascade + jackknife
+- [`examples/05_balance.py`](examples/05_balance.py) — covariate balance (SMD before/after)
 
 ## Gold testing
 

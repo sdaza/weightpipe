@@ -8,6 +8,7 @@
 - When no design weight is given, `Design` / `WeightPipe` create `base_weight=1.0` for all rows and log an informational message.
 - Package logging: `setup_logging()` / `set_log_level()` enable compact `weightpipe` log output; the library is silent by default.
 - `margins()` / `WeightPipe.margins()`: anytime weighted category totals and proportions; optional targets (or `targets="calibrate"`) for fit checks. Calibrate diagnostics include a tidy `margin_table`.
+- `balance()` / `WeightPipe.balance()`: covariate balance before vs after weighting (SMD/ASMD for continuous and categorical covariates), with optional population microdata or explicit means/proportions; returns a `BalanceReport` (`table` + `summary`).
 - Recipe pipeline: unknown eligibility, drop ineligible, weighting-class / propensity NR (`logit`, `gbm`, `forest`), raking, poststrat, linear/GREG calibrate (optional propensity assist; optional `forest`/`gbm` embedding engines), ratio trim, Tukey/Potter auto trim.
 - Household `cluster=` on eligibility and nonresponse; bounded (`bounds=`) and ridge (`penalty=`) linear calibration.
 - Parameter-driven `Design(...)` (kind inferred from `N` / `N_h`+`strata` / `weight`+`psu` / multi-stage `probabilities=` or `stage_weights=`) and `estimate()` (mean, total, proportion, ratio, median) with bootstrap and jackknife variance.

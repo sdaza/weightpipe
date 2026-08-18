@@ -2,7 +2,7 @@
 
 from weightpipe._logging import set_log_level, setup_logging
 from weightpipe.design import Design
-from weightpipe.diagnostics import design_effect, ess, margins
+from weightpipe.diagnostics import BalanceReport, balance, design_effect, ess, margins
 from weightpipe.estimate import estimate, point_estimate
 from weightpipe.frame import WeightFrame
 from weightpipe.methods import design_matrix, population_totals
@@ -36,6 +36,7 @@ from weightpipe.replicates import (
 from weightpipe.result import WeightResult, collect_weights, weight_factors
 
 __all__ = [
+    "BalanceReport",
     "BootstrapResult",
     "Design",
     "JackknifeResult",
@@ -46,6 +47,7 @@ __all__ = [
     "__version__",
     "allocate_strata",
     "allocation_table",
+    "balance",
     "boot_mean",
     "boot_median",
     "boot_proportion",

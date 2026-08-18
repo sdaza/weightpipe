@@ -1,8 +1,9 @@
-"""Weight / design-effect diagnostics."""
+"""Weight / design-effect / balance diagnostics."""
 
 import numpy as np
 import pandas as pd
 
+from weightpipe.diagnostics.balance import BalanceReport, balance
 from weightpipe.diagnostics.margins import (
     attach_margin_table,
     margin_table_from_targets,
@@ -12,7 +13,9 @@ from weightpipe.diagnostics.margins import (
 from weightpipe.result import WeightResult
 
 __all__ = [
+    "BalanceReport",
     "attach_margin_table",
+    "balance",
     "design_effect",
     "ess",
     "margin_table_from_targets",
