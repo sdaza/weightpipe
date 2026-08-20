@@ -11,7 +11,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from weightpipe.estimands import weighted_median, weighted_ratio
+from weightpipe.estimands import weighted_mean, weighted_median, weighted_ratio, weighted_total
+from weightpipe.methods.linear import linear_calibrate
 from weightpipe.methods.nonresponse import weighting_class_nonresponse
 from weightpipe.methods.poststrat import poststratify
 from weightpipe.methods.raking import rake
@@ -25,6 +26,43 @@ def _read_optional(name: str) -> pd.DataFrame | None:
     if not path.exists():
         return None
     return pd.read_csv(path)
+
+
+def _require_r_package(name: str) -> None:
+    pytest.importorskip("rpy2")
+    from rpy2.robjects.packages import importr
+
+    try:
+        importr(name)
+    except Exception:
+        pytest.skip(f"R package '{name}' not installed")
+
+
+def _estimand_toy() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "y": [10.0, 12.0, 20.0, 22.0, 11.0, 13.0, 21.0, 23.0],
+            "x": [2.0, 2.0, 4.0, 4.0, 2.0, 2.0, 4.0, 4.0],
+            "pw": [1.0] * 8,
+        }
+    )
+
+
+def _linear_toy() -> tuple[pd.DataFrame, dict[str, float]]:
+    df = pd.DataFrame(
+        {
+            "region": ["N", "N", "S", "S"],
+            "age": [20.0, 40.0, 30.0, 50.0],
+            "pw": [1.0, 1.0, 1.0, 1.0],
+        }
+    )
+    totals = {"(Intercept)": 100.0, "regionS": 50.0, "age": 3500.0}
+    return df, totals
+
+
+def _assert_median_vs_survey(ours: float, theirs: float, y: pd.Series) -> None:
+    # survey::svyquantile may use a slightly different quantile definition.
+    assert ours == pytest.approx(theirs, abs=1e-8) or abs(ours - theirs) <= min(np.diff(np.unique(y)))
 
 
 def test_rake_matches_r_survey_csv() -> None:
@@ -45,26 +83,59 @@ def test_poststrat_matches_r_survey_csv() -> None:
     np.testing.assert_allclose(w.to_numpy(), g["weight_r_survey"].to_numpy(), rtol=1e-10, atol=1e-10)
 
 
-def test_ratio_median_match_r_survey_csv() -> None:
-    g = _read_optional("ratio_median_r_survey.csv")
+def test_linear_calibrate_matches_r_survey_csv() -> None:
+    g = _read_optional("linear_calibrate_r_survey.csv")
     if g is None:
-        pytest.skip("missing tests/gold/ratio_median_r_survey.csv — run generate_r_gold.R")
-    # Reconstruct the microdata used in generate_r_gold.R
-    df = pd.DataFrame(
-        {
-            "y": [10.0, 12.0, 20.0, 22.0, 11.0, 13.0, 21.0, 23.0],
-            "x": [2.0, 2.0, 4.0, 4.0, 2.0, 2.0, 4.0, 4.0],
-            "pw": [1.0] * 8,
-        }
-    )
-    row_ratio = g.loc[g["estimand"] == "ratio"].iloc[0]
-    row_med = g.loc[g["estimand"] == "median"].iloc[0]
-    assert weighted_ratio(df["pw"], df["y"], df["x"]) == pytest.approx(float(row_ratio["estimate_r_survey"]), rel=1e-10)
-    # survey::svyquantile may use a slightly different quantile definition;
-    # allow a small absolute tolerance and document source.
-    ours = weighted_median(df["pw"], df["y"])
-    theirs = float(row_med["estimate_r_survey"])
-    assert ours == pytest.approx(theirs, abs=1e-8) or abs(ours - theirs) <= min(np.diff(np.unique(df["y"])))
+        pytest.skip("missing tests/gold/linear_calibrate_r_survey.csv — run generate_r_gold.R")
+    df, totals = _linear_toy()
+    w, _, diag = linear_calibrate(g["pw"], g, formula="~ region + age", totals=totals, warn=False)
+    assert diag["converged"] is True
+    np.testing.assert_allclose(w.to_numpy(), g["weight_r_survey"].to_numpy(), rtol=1e-8, atol=1e-8)
+    np.testing.assert_allclose(df["pw"].to_numpy(), g["pw"].to_numpy())
+
+
+def test_estimands_match_r_survey_csv() -> None:
+    g = _read_optional("estimands_r_survey.csv")
+    if g is None:
+        g = _read_optional("ratio_median_r_survey.csv")
+    if g is None:
+        pytest.skip("missing tests/gold/estimands_r_survey.csv — run generate_r_gold.R")
+    df = _estimand_toy()
+    expected = {str(row["estimand"]): float(row["estimate_r_survey"]) for _, row in g.iterrows()}
+    if "mean" in expected:
+        assert weighted_mean(df["pw"], df["y"]) == pytest.approx(expected["mean"], rel=1e-10)
+    if "total" in expected:
+        assert weighted_total(df["pw"], df["y"]) == pytest.approx(expected["total"], rel=1e-10)
+    assert weighted_ratio(df["pw"], df["y"], df["x"]) == pytest.approx(expected["ratio"], rel=1e-10)
+    _assert_median_vs_survey(weighted_median(df["pw"], df["y"]), expected["median"], df["y"])
+
+
+def test_rake_matches_weightflow_csv() -> None:
+    g = _read_optional("raking_2x2_weightflow.csv")
+    if g is None:
+        pytest.skip("missing tests/gold/raking_2x2_weightflow.csv — run generate_r_gold.R")
+    margins = {"sex": {"M": 60.0, "F": 40.0}, "region": {"N": 30.0, "S": 70.0}}
+    w, _, diag = rake(g["pw"], g, margins=margins, max_iter=200, tol=1e-12, warn=False)
+    assert diag["converged"] is True
+    np.testing.assert_allclose(w.to_numpy(), g["weight_weightflow"].to_numpy(), rtol=1e-6, atol=1e-6)
+
+
+def test_poststrat_matches_weightflow_csv() -> None:
+    g = _read_optional("poststrat_region_weightflow.csv")
+    if g is None:
+        pytest.skip("missing tests/gold/poststrat_region_weightflow.csv — run generate_r_gold.R")
+    w, _, _ = poststratify(g["pw"], g, margins={"region": {"N": 10.0, "S": 30.0}})
+    np.testing.assert_allclose(w.to_numpy(), g["weight_weightflow"].to_numpy(), rtol=1e-6, atol=1e-6)
+
+
+def test_linear_calibrate_matches_weightflow_csv() -> None:
+    g = _read_optional("linear_calibrate_weightflow.csv")
+    if g is None:
+        pytest.skip("missing tests/gold/linear_calibrate_weightflow.csv — run generate_r_gold.R")
+    _, totals = _linear_toy()
+    w, _, diag = linear_calibrate(g["pw"], g, formula="~ region + age", totals=totals, warn=False)
+    assert diag["converged"] is True
+    np.testing.assert_allclose(w.to_numpy(), g["weight_weightflow"].to_numpy(), rtol=1e-6, atol=1e-6)
 
 
 def test_cascade_matches_weightflow_csv() -> None:
@@ -87,16 +158,10 @@ def test_cascade_matches_weightflow_csv() -> None:
 
 def test_rake_matches_r_survey_live() -> None:
     """Live rpy2 check against survey::rake (skips without rpy2/R/survey)."""
-    pytest.importorskip("rpy2")
+    _require_r_package("survey")
     from rpy2 import robjects as ro
     from rpy2.robjects import pandas2ri
     from rpy2.robjects.conversion import localconverter
-    from rpy2.robjects.packages import importr
-
-    try:
-        importr("survey")
-    except Exception:
-        pytest.skip("R package 'survey' not installed")
 
     df = pd.DataFrame(
         {
@@ -130,16 +195,10 @@ def test_rake_matches_r_survey_live() -> None:
 
 
 def test_ratio_median_match_r_survey_live() -> None:
-    pytest.importorskip("rpy2")
+    _require_r_package("survey")
     from rpy2 import robjects as ro
     from rpy2.robjects import pandas2ri
     from rpy2.robjects.conversion import localconverter
-    from rpy2.robjects.packages import importr
-
-    try:
-        importr("survey")
-    except Exception:
-        pytest.skip("R package 'survey' not installed")
 
     df = pd.DataFrame(
         {
@@ -168,16 +227,7 @@ def test_ratio_median_match_r_survey_live() -> None:
 
 
 def test_cascade_matches_weightflow_live() -> None:
-    pytest.importorskip("rpy2")
-    from rpy2.robjects.packages import importr
-
-    try:
-        importr("weightflow")
-    except Exception:
-        pytest.skip("R package 'weightflow' not installed")
-
-    # Prefer committed CSV path when present; live path exercises the generator contract.
-    # Re-run the same Python cascade and compare to a one-shot R call.
+    _require_r_package("weightflow")
     from rpy2 import robjects as ro
 
     ro.r(
