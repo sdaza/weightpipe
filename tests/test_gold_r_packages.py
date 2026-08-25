@@ -12,10 +12,12 @@ import pandas as pd
 import pytest
 
 from weightpipe.estimands import weighted_mean, weighted_median, weighted_ratio, weighted_total
+from weightpipe.methods.eligibility import drop_ineligible_weights, unknown_eligibility_weights
 from weightpipe.methods.linear import linear_calibrate
 from weightpipe.methods.nonresponse import weighting_class_nonresponse
 from weightpipe.methods.poststrat import poststratify
 from weightpipe.methods.raking import rake
+from weightpipe.methods.trim import trim_weights
 
 GOLD = Path(__file__).resolve().parent / "gold"
 pytestmark = pytest.mark.gold
@@ -110,6 +112,38 @@ def test_estimands_match_r_survey_csv() -> None:
     _assert_median_vs_survey(weighted_median(df["pw"], df["y"]), expected["median"], df["y"])
 
 
+def test_unknown_eligibility_matches_weightflow_csv() -> None:
+    g = _read_optional("unknown_eligibility_weightflow.csv")
+    if g is None:
+        pytest.skip("missing tests/gold/unknown_eligibility_weightflow.csv — run generate_r_gold.R")
+    w, _, _ = unknown_eligibility_weights(g["pw"], g, unknown="unknown", by=["region"])
+    np.testing.assert_allclose(w.to_numpy(), g["weight_weightflow"].to_numpy(), rtol=1e-6, atol=1e-6)
+
+
+def test_drop_ineligible_matches_weightflow_csv() -> None:
+    g = _read_optional("drop_ineligible_weightflow.csv")
+    if g is None:
+        pytest.skip("missing tests/gold/drop_ineligible_weightflow.csv — run generate_r_gold.R")
+    w, _, _ = drop_ineligible_weights(g["pw"], g, ineligible="ineligible")
+    np.testing.assert_allclose(w.to_numpy(), g["weight_weightflow"].to_numpy(), rtol=1e-6, atol=1e-6)
+
+
+def test_weighting_class_nr_matches_weightflow_csv() -> None:
+    g = _read_optional("nr_weighting_class_weightflow.csv")
+    if g is None:
+        pytest.skip("missing tests/gold/nr_weighting_class_weightflow.csv — run generate_r_gold.R")
+    w, _, _ = weighting_class_nonresponse(g["pw"], g, respondent="responded", by=["region"])
+    np.testing.assert_allclose(w.to_numpy(), g["weight_weightflow"].to_numpy(), rtol=1e-6, atol=1e-6)
+
+
+def test_trim_value_noredist_matches_weightflow_csv() -> None:
+    g = _read_optional("trim_value_noredist_weightflow.csv")
+    if g is None:
+        pytest.skip("missing tests/gold/trim_value_noredist_weightflow.csv — run generate_r_gold.R")
+    w, _, _ = trim_weights(g["pw"], g, max_ratio=5.0, reference="value", redistribute=False)
+    np.testing.assert_allclose(w.to_numpy(), g["weight_weightflow"].to_numpy(), rtol=1e-6, atol=1e-6)
+
+
 def test_rake_matches_weightflow_csv() -> None:
     g = _read_optional("raking_2x2_weightflow.csv")
     if g is None:
@@ -153,6 +187,27 @@ def test_cascade_matches_weightflow_csv() -> None:
         warn=False,
     )
     assert diag["converged"] is True
+    np.testing.assert_allclose(w.to_numpy(), g["weight_weightflow"].to_numpy(), rtol=1e-6, atol=1e-6)
+
+
+def test_cascade_full_matches_weightflow_csv() -> None:
+    g = _read_optional("cascade_full_weightflow.csv")
+    if g is None:
+        pytest.skip("missing tests/gold/cascade_full_weightflow.csv — run generate_r_gold.R")
+    w = g["pw"].astype(float)
+    w, _, _ = unknown_eligibility_weights(w, g, unknown="unknown", by=["region"])
+    w, _, _ = drop_ineligible_weights(w, g, ineligible="ineligible")
+    w, _, _ = weighting_class_nonresponse(w, g, respondent="responded", by=["region"])
+    w, _, diag = rake(
+        w,
+        g,
+        margins={"sex": {"M": 3.0, "F": 3.0}, "region": {"N": 3.0, "S": 3.0}},
+        max_iter=200,
+        tol=1e-12,
+        warn=False,
+    )
+    assert diag["converged"] is True
+    w, _, _ = trim_weights(w, g, max_ratio=10.0, reference="median", redistribute=False)
     np.testing.assert_allclose(w.to_numpy(), g["weight_weightflow"].to_numpy(), rtol=1e-6, atol=1e-6)
 
 

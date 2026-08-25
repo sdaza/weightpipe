@@ -215,6 +215,6 @@ class WeightPipe:
         )
 
     def estimate(self, variable: str, **kwargs: Any) -> pd.DataFrame:
-        """Estimate with recipe-aware bootstrap or jackknife variance."""
+        """Estimate with recipe-aware bootstrap/jackknife, or linearized SE."""
         kwargs.setdefault("fitted", self.result)
         return _estimate(self._recipe, variable, **kwargs)

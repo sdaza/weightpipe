@@ -3,6 +3,7 @@
 from dataclasses import dataclass, field
 from typing import Any, Self
 
+import numpy as np
 import pandas as pd
 
 
@@ -17,11 +18,15 @@ class WeightFrame:
     - ``factor_<step>``: multiplicative adjustment for named step
     - ``final_weight``: last stage weight
     - design columns: ``stratum``, ``psu``, disposition fields, etc.
+
+    Replicate ``prep`` can keep current weights in ``_weights`` and share
+    ``data`` without writing intermediate columns.
     """
 
     data: pd.DataFrame
     step_names: tuple[str, ...] = ()
     meta: dict[str, Any] = field(default_factory=dict)
+    _weights: pd.Series | None = field(default=None, repr=False)
 
     def __post_init__(self) -> None:
         if "base_weight" not in self.data.columns:
@@ -29,7 +34,7 @@ class WeightFrame:
         # Zero is allowed (dropped / bootstrap non-selected PSUs); negatives are not.
         if (self.data["base_weight"] < 0).any():
             raise ValueError("base_weight must be non-negative")
-        if "final_weight" not in self.data.columns:
+        if self._weights is None and "final_weight" not in self.data.columns:
             object.__setattr__(
                 self,
                 "data",
@@ -61,7 +66,31 @@ class WeightFrame:
 
     @property
     def weights(self) -> pd.Series:
+        if self._weights is not None:
+            return self._weights
         return self.data["final_weight"]
+
+    def with_live_weights(
+        self,
+        weights: pd.Series,
+        *,
+        columns: dict[str, pd.Series] | None = None,
+    ) -> Self:
+        """Replace current weights without copying the full frame (replicate path)."""
+        data = self.data
+        if columns:
+            data = data.copy(deep=False)
+            for name, series in columns.items():
+                if len(series) != len(data):
+                    raise ValueError(f"column {name!r} length must match frame rows")
+                data[name] = np.asarray(series)
+        live = pd.Series(np.asarray(weights, dtype=float), index=data.index, name="weights")
+        return WeightFrame(
+            data=data,
+            step_names=self.step_names,
+            meta=dict(self.meta),
+            _weights=live,
+        )
 
     def with_step(
         self,

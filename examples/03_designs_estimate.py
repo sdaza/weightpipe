@@ -53,12 +53,14 @@ pipe_cl = WeightPipe(df_cl, weight="pw", psu="psu", strata="stratum")
 print(pipe_cl.collect_weights().head())
 
 # %%
-print("mean")
+print("mean (linearization, weights treated as fixed)")
+print(pipe_cl.estimate("y", estimand="mean", variance="linearization").round(3).to_string(index=False))
+print("mean (bootstrap)")
 print(pipe_cl.estimate("y", estimand="mean", replicates=100, seed=3).round(3).to_string(index=False))
 print("proportion employed")
 print(pipe_cl.estimate("employed", estimand="proportion", replicates=100, seed=3).round(3).to_string(index=False))
 print("total y")
-print(pipe_cl.estimate("y", estimand="total", replicates=100, seed=3).round(3).to_string(index=False))
+print(pipe_cl.estimate("y", estimand="total", variance="linearization").round(3).to_string(index=False))
 
 # %%
 print("ratio y/x (jackknife)")
@@ -84,4 +86,5 @@ df_ms = pd.DataFrame(
 pipe_ms = WeightPipe(df_ms, probabilities=["p1", "p2"], psu="psu", strata="stratum")
 print("multistage kind:", pipe_ms.kind)
 print("weights:", pipe_ms.weights.tolist())
+print(pipe_ms.estimate("y", estimand="mean", variance="linearization").round(3).to_string(index=False))
 print(pipe_ms.estimate("y", estimand="mean", variance="jackknife").round(3).to_string(index=False))

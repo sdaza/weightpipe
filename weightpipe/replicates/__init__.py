@@ -79,6 +79,17 @@ def _rao_wu_factors(
     return fac, lonely
 
 
+def _prep_replicate_weights(recipe: Recipe, base_weights: np.ndarray) -> np.ndarray:
+    """Re-run the recipe on scaled base weights without copying the microdata frame."""
+    return recipe.prep(
+        warn=False,
+        record=False,
+        min_cell_n=None,
+        max_factor=None,
+        base_weights=base_weights,
+    ).weights.to_numpy(dtype=float)
+
+
 def bootstrap_weights(
     recipe: Recipe,
     *,
@@ -126,18 +137,8 @@ def bootstrap_weights(
     reps = np.empty((n, replicates), dtype=float)
     failed = 0
     for b, fac in enumerate(facs):
-        scaled = data.copy()
-        scaled[bw_col] = bw0 * fac
         try:
-            rep_recipe = Recipe(
-                data=scaled,
-                base_weight=bw_col,
-                unit_id=recipe.unit_id,
-                steps=recipe.steps,
-                meta=dict(recipe.meta),
-                design=None,  # avoid reusing design.data with unscaled weights
-            )
-            reps[:, b] = rep_recipe.prep(warn=False).weights.to_numpy(dtype=float)
+            reps[:, b] = _prep_replicate_weights(recipe, bw0 * fac)
         except Exception:
             reps[:, b] = np.nan
             failed += 1
@@ -237,18 +238,8 @@ def jackknife_weights(
     reps = np.empty((n, r), dtype=float)
     failed = 0
     for b, fac in enumerate(facs):
-        scaled = data.copy()
-        scaled[bw_col] = bw0 * fac
         try:
-            rep_recipe = Recipe(
-                data=scaled,
-                base_weight=bw_col,
-                unit_id=recipe.unit_id,
-                steps=recipe.steps,
-                meta=dict(recipe.meta),
-                design=None,
-            )
-            reps[:, b] = rep_recipe.prep(warn=False).weights.to_numpy(dtype=float)
+            reps[:, b] = _prep_replicate_weights(recipe, bw0 * fac)
         except Exception:
             reps[:, b] = np.nan
             failed += 1

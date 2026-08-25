@@ -91,6 +91,23 @@ def resolve_raking_margins(
     return margins, meta
 
 
+def _rake_index_cache(
+    data: pd.DataFrame,
+    resolved: MarginDict,
+    active: np.ndarray,
+) -> dict[tuple[str, str], np.ndarray]:
+    """Integer row indexes per (variable, category), built once for the IPF loop."""
+    cache: dict[tuple[str, str], np.ndarray] = {}
+    for var, target in resolved.items():
+        if var not in data.columns:
+            raise KeyError(f"Margin variable not found: {var}")
+        codes = data[var].astype(str).to_numpy()
+        for lev in target:
+            key = str(lev)
+            cache[(var, key)] = np.flatnonzero((codes == key) & active)
+    return cache
+
+
 def rake(
     weights: pd.Series,
     data: pd.DataFrame,
@@ -102,6 +119,7 @@ def rake(
     max_iter: int = 50,
     tol: float = 1e-6,
     warn: bool = True,
+    diagnostics: bool = True,
 ) -> tuple[pd.Series, pd.Series, dict[str, Any]]:
     """Iterative proportional fitting to margins or proportion distributions."""
     resolved, target_meta = resolve_raking_margins(
@@ -115,6 +133,7 @@ def rake(
     w0 = weights.astype(float).to_numpy(copy=True)
     active = w0 > 0
     new_w = w0.copy()
+    cache = _rake_index_cache(data, resolved, active)
     it = 0
     maxdiff = np.inf
 
@@ -122,11 +141,8 @@ def rake(
         it += 1
         maxdiff = 0.0
         for var, target in resolved.items():
-            if var not in data.columns:
-                raise KeyError(f"Margin variable not found: {var}")
-            f = data[var].astype(str).to_numpy()
             for lev, tot in target.items():
-                idx = np.where((f == str(lev)) & active)[0]
+                idx = cache[(var, str(lev))]
                 cur = float(new_w[idx].sum()) if idx.size else 0.0
                 if cur > 0:
                     adj = float(tot) / cur
@@ -145,22 +161,24 @@ def rake(
     factors[active] = np.where(w0[active] > 0, new_w[active] / w0[active], 1.0)
 
     diag_rows: list[dict[str, Any]] = []
-    for var, target in resolved.items():
-        f = data[var].astype(str).to_numpy()
-        for lev, tot in target.items():
-            idx = np.where((f == str(lev)) & active)[0]
-            achieved = float(new_w[idx].sum()) if idx.size else 0.0
-            row: dict[str, Any] = {
-                "variable": var,
-                "category": str(lev),
-                "target": float(tot),
-                "achieved": achieved,
-                "abs_diff": abs(achieved - float(tot)),
-            }
-            if "proportions" in target_meta:
-                row["target_proportion"] = float(target_meta["proportions"][var][str(lev)])
-                row["achieved_proportion"] = achieved / float(target_meta["total"]) if target_meta["total"] else np.nan
-            diag_rows.append(row)
+    if diagnostics:
+        for var, target in resolved.items():
+            for lev, tot in target.items():
+                idx = cache[(var, str(lev))]
+                achieved = float(new_w[idx].sum()) if idx.size else 0.0
+                row: dict[str, Any] = {
+                    "variable": var,
+                    "category": str(lev),
+                    "target": float(tot),
+                    "achieved": achieved,
+                    "abs_diff": abs(achieved - float(tot)),
+                }
+                if "proportions" in target_meta:
+                    row["target_proportion"] = float(target_meta["proportions"][var][str(lev)])
+                    row["achieved_proportion"] = (
+                        achieved / float(target_meta["total"]) if target_meta["total"] else np.nan
+                    )
+                diag_rows.append(row)
 
     diag = {
         "method": "raking",
@@ -187,6 +205,7 @@ def apply_raking(
     max_iter: int = 50,
     tol: float = 1e-6,
     warn: bool = True,
+    diagnostics: bool = True,
 ) -> StepResult:
     weights, factors, diag = rake(
         frame.weights,
@@ -198,5 +217,6 @@ def apply_raking(
         max_iter=max_iter,
         tol=tol,
         warn=warn,
+        diagnostics=diagnostics,
     )
     return StepResult(weights=weights, factors=factors, diagnostics=diag)

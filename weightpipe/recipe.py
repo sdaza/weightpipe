@@ -240,20 +240,52 @@ class Recipe:
             out["design"] = self.design.to_dict()
         return out
 
+    def _lean_frame(self, base_weights: np.ndarray | pd.Series | None) -> WeightFrame:
+        """Shared microdata plus a live weight vector (no intermediate columns)."""
+        data = self.data
+        if base_weights is None:
+            w = data[self.base_weight].to_numpy(dtype=float, copy=True)
+            if self.base_weight != "base_weight" and "base_weight" not in data.columns:
+                data = data.assign(base_weight=data[self.base_weight])
+        else:
+            w = np.asarray(base_weights, dtype=float).copy()
+            if w.shape[0] != len(data):
+                raise ValueError("base_weights length must match recipe rows")
+            data = data.assign(**{self.base_weight: w})
+            if self.base_weight != "base_weight":
+                data = data.assign(base_weight=w)
+        return WeightFrame(
+            data=data,
+            _weights=pd.Series(w, index=data.index, name="weights"),
+            meta={"base_weight_source": self.base_weight, "record": False},
+        )
+
     def prep(
         self,
         *,
         min_cell_n: int | None = 30,
         max_factor: float | None = 2.5,
         warn: bool = False,
+        record: bool = True,
+        base_weights: np.ndarray | pd.Series | None = None,
     ) -> WeightResult:
-        """Estimate the weighting cascade (apply recorded steps in order)."""
-        frame = WeightFrame.from_base(
-            self.data,
-            base_weight=self.base_weight,
-            unit_id=self.unit_id,
-        )
-        history: dict[str, pd.Series] = {"base": frame.weights.copy()}
+        """Estimate the weighting cascade (apply recorded steps in order).
+
+        ``record=False`` is for replicate ``prep``: skip history, alerts, and
+        per-step frame copies. Pass ``base_weights`` to reuse the same
+        microdata with a scaled design weight.
+        """
+        if record:
+            if base_weights is not None:
+                raise ValueError("base_weights= is only used with record=False")
+            frame = WeightFrame.from_base(
+                self.data,
+                base_weight=self.base_weight,
+                unit_id=self.unit_id,
+            )
+        else:
+            frame = self._lean_frame(base_weights)
+        history: dict[str, pd.Series] = {"base": frame.weights.copy()} if record else {}
         step_diags: dict[str, Any] = {}
         alerts: list[str] = []
 
@@ -261,44 +293,46 @@ class Recipe:
             step.validate(frame)
             w_before = frame.weights
             if step.name == "calibrate":
-                res = step.apply(frame, warn=warn)
+                res = step.apply(frame, warn=warn, record=record)
             else:
                 res = step.apply(frame)
-            frame = frame.with_step(
-                step.name,
-                weights=res.weights,
-                factors=res.factors,
-                meta=res.diagnostics,
-                columns=res.columns,
-            )
-            history[f"stage_{step.name}"] = res.weights.copy()
-            step_diags[step.name] = res.diagnostics
+            if record:
+                frame = frame.with_step(
+                    step.name,
+                    weights=res.weights,
+                    factors=res.factors,
+                    meta=res.diagnostics,
+                    columns=res.columns,
+                )
+                history[f"stage_{step.name}"] = res.weights.copy()
+                step_diags[step.name] = res.diagnostics
+                step_alerts = _step_alerts(
+                    w_before,
+                    res.weights,
+                    res.diagnostics,
+                    step_name=step.name,
+                    min_cell_n=min_cell_n,
+                    max_factor=max_factor,
+                )
+                alerts.extend(step_alerts)
+                if warn:
+                    for a in step_alerts:
+                        import warnings
 
-            step_alerts = _step_alerts(
-                w_before,
-                res.weights,
-                res.diagnostics,
-                step_name=step.name,
-                min_cell_n=min_cell_n,
-                max_factor=max_factor,
-            )
-            alerts.extend(step_alerts)
-            if warn:
-                for a in step_alerts:
-                    import warnings
-
-                    warnings.warn(a, RuntimeWarning, stacklevel=2)
+                        warnings.warn(a, RuntimeWarning, stacklevel=2)
+            else:
+                frame = frame.with_live_weights(res.weights, columns=res.columns)
 
         return WeightResult(
             frame=frame,
             diagnostics={
                 "n": len(frame.data),
-                "steps_applied": list(frame.step_names),
+                "steps_applied": list(frame.step_names) if record else [s.name for s in self.steps],
                 "steps": step_diags,
                 "min_cell_n": min_cell_n,
                 "max_factor": max_factor,
             },
-            recipe=self.to_dict(),
+            recipe=self.to_dict() if record else {},
             alerts=tuple(alerts),
             history=history,
         )

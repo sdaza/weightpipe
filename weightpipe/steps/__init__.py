@@ -235,7 +235,7 @@ class CalibrateStep:
             f"calibrate method={self.method!r} is not implemented yet (supports raking, poststratify, linear)."
         )
 
-    def apply(self, frame: WeightFrame, *, warn: bool = True) -> StepResult:
+    def apply(self, frame: WeightFrame, *, warn: bool = True, record: bool = True) -> StepResult:
         margins = self.margins
         proportions = self.proportions
         formula = self.formula
@@ -267,7 +267,12 @@ class CalibrateStep:
                 data["propensity_class"] = cls.map(
                     lambda v: str(int(v)) if pd.notna(v) and float(v).is_integer() else (str(v) if pd.notna(v) else v)
                 )
-                work = WeightFrame(data=data, step_names=frame.step_names, meta=dict(frame.meta))
+                work = WeightFrame(
+                    data=data,
+                    step_names=frame.step_names,
+                    meta=dict(frame.meta),
+                    _weights=frame._weights,
+                )
 
         if self.engine in ("forest", "gbm"):
             assert formula is not None and self.population is not None
@@ -297,6 +302,7 @@ class CalibrateStep:
                 max_iter=self.max_iter,
                 tol=self.tol,
                 warn=warn,
+                diagnostics=record,
             )
         elif self.method == "poststratify":
             res = apply_poststratify(
@@ -323,12 +329,14 @@ class CalibrateStep:
             diag.update(assist_diag)
         else:
             diag = dict(res.diagnostics)
-        from weightpipe.diagnostics.margins import attach_margin_table
+        if record:
+            from weightpipe.diagnostics.margins import attach_margin_table
 
+            diag = attach_margin_table(diag)
         return StepResult(
             weights=res.weights,
             factors=res.factors,
-            diagnostics=attach_margin_table(diag),
+            diagnostics=diag,
             columns=res.columns,
         )
 

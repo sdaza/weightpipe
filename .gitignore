@@ -11,5 +11,6 @@ __pycache__/
 .cursor
 .claude
 .tmp/
+scripts/bench_size_memory_results.json
 *.png
 settings.json

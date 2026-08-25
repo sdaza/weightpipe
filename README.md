@@ -6,6 +6,8 @@
 
 Survey weighting in Python: define a sampling design, apply a weighting recipe, then estimate means, totals, proportions, ratios, and medians with bootstrap or jackknife standard errors.
 
+The point is one API for the whole path — design, eligibility, nonresponse, calibration, trim, estimates, and sample-size planning — instead of stitching specialized raking, weighting, and variance packages together.
+
 ## Install
 
 Install from GitHub (latest `main`):
@@ -82,7 +84,37 @@ WeightPipe(df, stage_weights=["w1", "w2"], psu="psu")     # multi-stage: w = w1 
 WeightPipe(df, weight="pw")                               # existing design weights
 ```
 
-For multi-stage samples, stage selection is folded into the weight. Use `psu` as the ultimate cluster for variance estimation. Check what was inferred with `pipe.kind`.
+Check what was inferred with `pipe.kind`.
+
+### Multi-stage clusters (one `psu`)
+
+You can **draw** several nested stages in the field. You still name **one** `psu` for variance: the first-stage unit (the ultimate cluster). Later stages go into the weight, not into extra PSU columns.
+
+Example: sample **schools**, then **classes** inside those schools, then **students** inside those classes. That is a three-stage cluster sample.
+
+| Stage | Unit | What it is for |
+|-------|------|----------------|
+| 1 | School | PSU — independent draws; use this in `psu=` |
+| 2 | Class | Nested in school — inclusion goes in the weight |
+| 3 | Student | Row in the data — inclusion goes in the weight |
+
+```python
+# w = 1 / (p_school * p_class * p_student); SEs resample schools
+WeightPipe(
+    df,
+    probabilities=["p_school", "p_class", "p_student"],
+    psu="school",
+    # strata="district",  # if schools were drawn within strata
+)
+```
+
+If you already have per-stage weights (`w_k = 1/π_k`), use `stage_weights=["w_school", "w_class", "w_student"]` with the same `psu="school"`. If the product is already in one column, `WeightPipe(df, weight="pw", psu="school")` is enough for variance (`kind` is then `"cluster"` rather than `"multistage"`).
+
+**Why `psu` is school, not class.** Classes are selected independently *inside a sampled school*, not from a national list of all classes. A class can appear only if its school was selected first; two classes in the same school share that school draw. Bootstrap and jackknife therefore resample **whole schools** (every selected class and student in that school moves together). Setting `psu` to class would treat classes as independent first-stage units and understate SEs; setting it to student would treat the sample like an SRS of students.
+
+`strata=` is separate (for example district). That is the groups *within which* schools were drawn, not a second PSU.
+
+If you take every student in the selected classes, stage 3 has π = 1 and the sample is two-stage (schools → classes). `psu` is still `"school"`.
 
 ## Weighting steps
 
@@ -124,13 +156,13 @@ report.summary  # max |SMD|, n_imbalanced, ESS before/after
 ```python
 pipe.estimate("y", estimand="mean", variance="jackknife")
 pipe.estimate("employed", estimand="proportion", variance="bootstrap", replicates=200, seed=1)
-pipe.estimate("y", estimand="total", variance="jackknife")
+pipe.estimate("y", estimand="total", variance="linearization")
 pipe.estimate("y", estimand="ratio", denominator="x", variance="jackknife")
 pipe.estimate("y", estimand="median", variance="jackknife")
 ```
 
 Supported estimands: `mean`, `total`, `proportion`, `ratio`, `median`.  
-Variance options: `bootstrap` (Rao–Wu; default) or `jackknife` (delete-a-PSU).
+Variance: `bootstrap` (Rao–Wu; default) and `jackknife` (delete-a-PSU) re-run the recipe on each replicate so SEs include estimated weights. `linearization` is the fast ultimate-cluster Taylor SE that treats the fitted weights as fixed (survey-style). Median has no linearized SE.
 
 ## Sample-size planning
 
@@ -194,6 +226,50 @@ Interactive scripts (run cell-by-cell or with Python):
 - [`examples/03_designs_estimate.py`](examples/03_designs_estimate.py) — SRS / stratified / cluster / multi-stage
 - [`examples/04_cascade_parity.py`](examples/04_cascade_parity.py) — full cascade + jackknife
 - [`examples/05_balance.py`](examples/05_balance.py) — covariate balance (SMD before/after)
+
+## Comparisons
+
+weightpipe is meant to **integrate** the steps you usually assemble from several tools, and to make that cascade **easier** in Python: one `WeightPipe`, in order, with diagnostics and estimates at the end.
+
+Specialized packages still do one slice well. [Weightipy](https://pypi.org/project/weightipy/0.4.2/) 0.4.2 is a fast RIM (iterative raking) engine. R [`survey`](https://CRAN.R-project.org/package=survey) is the usual analysis toolkit once you already have weights. R [`weightflow`](https://CRAN.R-project.org/package=weightflow) is the closest recipe-style analogue in R. Python [`samplics`](https://pypi.org/project/samplics/) covers several weighting helpers (archived upstream). R [`sampler`](https://github.com/sdaza/sampler) is sample-size planning.
+
+| | weightpipe | Weightipy 0.4.2 | samplics | R `survey` | R `weightflow` | R `sampler` |
+|--|:----------:|:---------------:|:--------:|:----------:|:--------------:|:-----------:|
+| Language | Python | Python | Python | R | R | R |
+| Sampling design (SRS / strata / PSU) | ✓ | | some | ✓ | ✓ | |
+| Unknown eligibility / drop ineligible | ✓ | | | | ✓ | |
+| Nonresponse (class / propensity) | ✓ | | class | | ✓ | |
+| Raking (RIM / IPF) | ✓ | ✓ | ✓ | ✓ | ✓ | |
+| Post-stratification | ✓ | | ✓ | ✓ | ✓ | |
+| Linear / GREG calibration | ✓ | | ✓ | ✓ | ✓ | |
+| Trim | ✓ | | | | ✓ | |
+| Estimates + bootstrap / jackknife | ✓ | | some | ✓ | via `survey` | |
+| Sample-size planning | ✓ | | | | | ✓ |
+| One chained recipe | ✓ | raking only | | | ✓ | |
+
+Weightipy stays a focused raking library (targets from dicts or census tables, nested/segmented RIM, Kish efficiency). weightpipe uses the same class of iterative raking as one `calibrate(method="raking")` step, then continues with the rest of the survey workflow.
+
+### Numerical gold
+
+Shared methods are checked on the same toy frames against frozen CSVs in [`tests/gold/`](tests/gold/) (CI) and optionally live R / samplics. These are **correctness** checks, not runtime speed benchmarks.
+
+| Method | R `survey` | R `weightflow` | samplics | R `sampler` |
+|--------|:----------:|:--------------:|:--------:|:-----------:|
+| Unknown eligibility | | ✓ | | |
+| Drop ineligible | | ✓ | | |
+| Weighting-class NR | | ✓ | ✓ | |
+| Raking | ✓ | ✓ | ✓ | |
+| Post-stratification | ✓ | ✓ | ✓ | |
+| Linear / GREG | ✓ | ✓ | ✓¹ | |
+| Trim (value cap, no redistribute) | | ✓ | | |
+| NR → raking cascade | | ✓ | | |
+| Full cascade (eligibility → trim) | | ✓ | | |
+| Mean, total, ratio, median | ✓ | | | |
+| Sample size / allocation / MOE | | | | ✓ |
+
+¹ Linear calibration vs samplics is a live check (`gold` extra), not a frozen CSV.
+
+Tolerances are tight (`1e-12`–`1e-6` depending on the solver). Median vs `survey::svyquantile` may differ by one unique *y* value because quantile definitions can differ. Logit propensity uses the same `1/p` adjustment as weightflow, but sklearn vs R `glm` coefficients are not bit-matched.
 
 ## Gold testing
 
