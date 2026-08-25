@@ -31,5 +31,5 @@ out
 
 # %%
 # Estimate with recipe-aware bootstrap SE/CI
-print(pipe.estimate("y", estimand="mean", variance="bootstrap", replicates=200, seed=1).round(3).to_string(index=False))
-print(pipe.estimate("y", estimand="total", variance="bootstrap", replicates=200, seed=1).round(3).to_string(index=False))
+print(pipe.estimate.mean("y", variance="bootstrap", replicates=200, seed=1).round(3).to_string(index=False))
+print(pipe.estimate.total("y", variance="bootstrap", replicates=200, seed=1).round(3).to_string(index=False))

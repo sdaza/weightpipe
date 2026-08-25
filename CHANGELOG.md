@@ -4,6 +4,7 @@
 
 ### Added
 
+- `pipe.estimate.mean` / `.total` / `.proportion` / `.ratio` / `.median`: estimand methods, several variables at once, and `by=` domain splits. `ratio` accepts one shared denominator or a list paired with the numerators. `pipe.estimate(...)` and `pipe.estimation` still work. The result table includes `cv`.
 - `estimate(..., variance="linearization")`: ultimate-cluster Taylor SE treating fitted weights as fixed (`mean` / `total` / `proportion` / `ratio`).
 - `WeightPipe`: single entry point that owns the sampling design and the weighting steps, fits lazily, and exposes `weights`, `collect_weights()`, `diagnostics`, and `estimate()`. `Design` / `Recipe` remain available for lower-level use.
 - When no design weight is given, `Design` / `WeightPipe` create `base_weight=1.0` for all rows and log an informational message.

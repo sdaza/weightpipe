@@ -30,9 +30,7 @@ PROPS = {
     "region": {"N": 0.25, "S": 0.25, "E": 0.25, "W": 0.25},
     "educ": {"hs": 0.40, "ba": 0.40, "grad": 0.20},
 }
-WEIGHTIPY_PCT = {
-    var: {lev: 100.0 * p for lev, p in dist.items()} for var, dist in PROPS.items()
-}
+WEIGHTIPY_PCT = {var: {lev: 100.0 * p for lev, p in dist.items()} for var, dist in PROPS.items()}
 REGIONS = ("N", "S", "E", "W")
 SIZES_DEFAULT = (5_000, 25_000, 100_000, 250_000)
 SIZES_QUICK = (5_000, 25_000)
@@ -192,9 +190,11 @@ def preload(job: str) -> None:
         return
     if job == "rake_samplics":
         from samplics.weighting import SampleWeight  # noqa: F401
+
         return
     if job == "rake_weightipy":
         import weightipy as wp  # noqa: F401
+
         return
     from weightpipe import WeightPipe, population_totals  # noqa: F401
 

@@ -56,15 +56,15 @@ pipe.weights  # final weights
 pipe.collect_weights(keep_intermediate=True)  # weights and per-step factors
 pipe.diagnostics  # per-step diagnostics and alerts
 
-pipe.estimate("y", estimand="mean", variance="jackknife")
-pipe.estimate("y", estimand="ratio", denominator="x", variance="jackknife")
-pipe.estimate("y", estimand="median", variance="bootstrap", replicates=200, seed=1)
+pipe.estimate.mean(["income", "food_share"], by="urban_rural")
+pipe.estimate.ratio(["food", "miles"], ["income", "trips"], by="urban_rural")
+pipe.estimate.median("y", variance="bootstrap", replicates=200, seed=1)
 ```
 
 Design weights alone are enough to estimate:
 
 ```python
-WeightPipe(df, N=10_000).estimate("y", estimand="mean", variance="bootstrap", seed=1)
+WeightPipe(df, N=10_000).estimate.mean("y", variance="bootstrap", seed=1)
 ```
 
 Each step returns a new pipe, so you can branch from a common base and compare.
@@ -153,13 +153,24 @@ report.summary  # max |SMD|, n_imbalanced, ESS before/after
 
 ## Estimation
 
+Pass one variable or a list. `by=` splits into domains (same idea as R `svyby` or svy's `sample.estimation.mean(..., by=...)`). Replicate weights are built once and reused.
+
 ```python
+pipe.estimate.mean(["income", "food_share"], by="urban_rural")
+pipe.estimate.mean("y", variance="jackknife")
+pipe.estimate.proportion("employed", by="region", variance="bootstrap", replicates=200, seed=1)
+pipe.estimate.total("y", variance="linearization")
+pipe.estimate.ratio("y", "x", variance="jackknife")
+pipe.estimate.ratio(["food", "housing"], "income")  # one denominator
+pipe.estimate.ratio(["food", "miles"], ["income", "trips"], by="urban_rural")  # paired
+pipe.estimate.median("y", variance="jackknife")
+
+# still valid
 pipe.estimate("y", estimand="mean", variance="jackknife")
-pipe.estimate("employed", estimand="proportion", variance="bootstrap", replicates=200, seed=1)
-pipe.estimate("y", estimand="total", variance="linearization")
-pipe.estimate("y", estimand="ratio", denominator="x", variance="jackknife")
-pipe.estimate("y", estimand="median", variance="jackknife")
+pipe.estimation.mean("y")  # alias of estimate
 ```
+
+The result is one row per variable × domain, with `estimate`, `se`, `cv`, and a confidence interval.
 
 Supported estimands: `mean`, `total`, `proportion`, `ratio`, `median`.  
 Variance: `bootstrap` (Rao–Wu; default) and `jackknife` (delete-a-PSU) re-run the recipe on each replicate so SEs include estimated weights. `linearization` is the fast ultimate-cluster Taylor SE that treats the fitted weights as fixed (survey-style). Median has no linearized SE.
@@ -214,7 +225,7 @@ from weightpipe import Design, Recipe, estimate
 design = Design(df, weight="pw", psu="psu", strata="stratum")
 recipe = Recipe.from_design(design).step_calibrate(method="raking", proportions=props)
 fitted = recipe.prep()
-estimate(recipe, "y", estimand="mean", fitted=fitted, variance="jackknife")
+estimate(recipe, ["y", "x"], by="region", fitted=fitted, variance="jackknife")
 ```
 
 ## Examples
@@ -223,7 +234,7 @@ Interactive scripts (run cell-by-cell or with Python):
 
 - [`examples/01_minimal_recipe.py`](examples/01_minimal_recipe.py) — design weights and bootstrap estimates
 - [`examples/02_nonresponse_raking.py`](examples/02_nonresponse_raking.py) — NR + raking
-- [`examples/03_designs_estimate.py`](examples/03_designs_estimate.py) — SRS / stratified / cluster / multi-stage
+- [`examples/03_designs_estimate.py`](examples/03_designs_estimate.py) — SRS / stratified / cluster / multi-stage; `estimate.mean(..., by=)`
 - [`examples/04_cascade_parity.py`](examples/04_cascade_parity.py) — full cascade + jackknife
 - [`examples/05_balance.py`](examples/05_balance.py) — covariate balance (SMD before/after)
 
@@ -231,23 +242,48 @@ Interactive scripts (run cell-by-cell or with Python):
 
 weightpipe is meant to **integrate** the steps you usually assemble from several tools, and to make that cascade **easier** in Python: one `WeightPipe`, in order, with diagnostics and estimates at the end.
 
-Specialized packages still do one slice well. [Weightipy](https://pypi.org/project/weightipy/0.4.2/) 0.4.2 is a fast RIM (iterative raking) engine. R [`survey`](https://CRAN.R-project.org/package=survey) is the usual analysis toolkit once you already have weights. R [`weightflow`](https://CRAN.R-project.org/package=weightflow) is the closest recipe-style analogue in R. Python [`samplics`](https://pypi.org/project/samplics/) covers several weighting helpers (archived upstream). R [`sampler`](https://github.com/sdaza/sampler) is sample-size planning.
+Specialized packages still do one slice well.
 
-| | weightpipe | Weightipy 0.4.2 | samplics | R `survey` | R `weightflow` | R `sampler` |
-|--|:----------:|:---------------:|:--------:|:----------:|:--------------:|:-----------:|
+**Raking / IPF only.** [Weightipy](https://pypi.org/project/weightipy/0.4.2/) 0.4.2 is a fast RIM engine (dicts or census tables, nested/segmented RIM, Kish efficiency). [ipfn](https://pypi.org/project/ipfn/) is a small Python IPF helper. R [`anesrake`](https://CRAN.R-project.org/package=anesrake) is ANES-style raking. [Quantipy3](https://github.com/Quantipy/quantipy3) is the market-research stack Weightipy was forked from.
+
+**Weighting recipes.** R [`weightflow`](https://CRAN.R-project.org/package=weightflow) is the closest recipe-style analogue (eligibility → NR → calibrate → trim, plus recipe-aware bootstrap/jackknife). R [`icarus`](https://CRAN.R-project.org/package=icarus) and [`ReGenesees`](https://github.com/DiegoZardetto/ReGenesees) are calibration-focused (raking, linear/GREG, official-statistics workflows).
+
+**Design-based analysis.** R [`survey`](https://CRAN.R-project.org/package=survey) is the usual toolkit once weights exist (`svydesign`, `svymean`, `svyby`, `svyglm`, `calibrate`, `rake`, `trimWeights`, `as.svrepdesign`). R [`srvyr`](https://CRAN.R-project.org/package=srvyr) is a dplyr front end on `survey`. [svy](https://svylab.com/svy) is the current Python analysis API (`svy.Design` + `sample.estimation.mean(..., by=...)`, GLM, tabs, BRR/SDR). It supersedes archived [`samplics`](https://pypi.org/project/samplics/), which already supported stratified/cluster estimation (`TaylorEstimator(..., stratum=, psu=)`) and sample selection (`SampleSelection`: SRS, systematic, PPS). samplics did **not** have a single design object — you passed those vectors on every call. That is an API gap, not missing design methods. Gold still matches samplics weighting helpers (rake, poststrat, class NR, GREG). weightpipe uses the same estimate shape after a recipe: `pipe.estimate.mean(["income", "food_share"], by="urban_rural")`.
+
+**Planning and selection.** R [`sampler`](https://github.com/sdaza/sampler) is sample-size / allocation / MOE (weightpipe's planning gold). R [`PracTools`](https://CRAN.R-project.org/package=PracTools) and [`surveyplanning`](https://CRAN.R-project.org/package=surveyplanning) are other planning kits. R [`sampling`](https://CRAN.R-project.org/package=sampling) (Tillé) draws PPS / stratified samples; svy (and formerly samplics) also select samples. weightpipe plans sizes, then you attach the collected microdata — it does not draw the field sample.
+
+**Diagnostics.** Meta [`balance`](https://github.com/facebookresearch/balance) is covariate balance (SMD / Love plots), not a weighting recipe. weightpipe's `balance()` is the SMD before/after check; `margins()` checks calibration targets.
+
+Marks mean the package has a first-class API for that row. "via `survey`" means weightflow builds the weights (or replicate weights) and you estimate in `survey` / `srvyr`.
+
+| | weightpipe | svy | Weightipy 0.4.2 | R `survey` | R `weightflow` | R `sampler` |
+|--|:----------:|:---:|:---------------:|:----------:|:--------------:|:-----------:|
 | Language | Python | Python | Python | R | R | R |
-| Sampling design (SRS / strata / PSU) | ✓ | | some | ✓ | ✓ | |
+| Design object (strata / PSU / weights) | ✓ | ✓ | | ✓ | base weights¹ | |
+| Multi-stage inclusion weights | ✓ | ✓ | | ✓ | | |
+| Sample selection (draw PPS / SRS) | | ✓ | | | | |
 | Unknown eligibility / drop ineligible | ✓ | | | | ✓ | |
-| Nonresponse (class / propensity) | ✓ | | class | | ✓ | |
+| Nonresponse | class + propensity | class | | | class + propensity | |
 | Raking (RIM / IPF) | ✓ | ✓ | ✓ | ✓ | ✓ | |
-| Post-stratification | ✓ | | ✓ | ✓ | ✓ | |
-| Linear / GREG calibration | ✓ | | ✓ | ✓ | ✓ | |
-| Trim | ✓ | | | | ✓ | |
-| Estimates + bootstrap / jackknife | ✓ | | some | ✓ | via `survey` | |
-| Sample-size planning | ✓ | | | | | ✓ |
-| One chained recipe | ✓ | raking only | | | ✓ | |
+| Nested / segmented RIM | | | ✓ | | | |
+| Post-stratification | ✓ | ✓ | | ✓ | ✓ | |
+| Linear / GREG calibration | ✓ | ✓ | | ✓ | ✓ | |
+| Trim | ✓ | ✓ | | ✓ | ✓ | |
+| One chained recipe | ✓ | fluent steps | raking only | | ✓ | |
+| Recipe-aware replicate weights | ✓ | ✓ | | | ✓ | |
+| Taylor linearization SE | ✓ | ✓ | | ✓ | via `survey` | |
+| Bootstrap / jackknife SE | ✓ | ✓ | | ✓ | ✓ | |
+| BRR / SDR | | ✓ | | ✓ | | |
+| Domain estimates (`by=`) | ✓ | ✓ | | ✓ | via `survey` | |
+| Several variables at once | ✓ | ✓ | | ✓ | via `survey` | |
+| GLM / tabs / Rao–Scott | | ✓ | | ✓ | via `survey` | |
+| Covariate balance (SMD) | ✓ | | | | | |
+| Sample-size planning / allocation | ✓ | ✓ | | | | ✓ |
+| Small-area estimation | | svy-sae | | | | |
 
-Weightipy stays a focused raking library (targets from dicts or census tables, nested/segmented RIM, Kish efficiency). weightpipe uses the same class of iterative raking as one `calibrate(method="raking")` step, then continues with the rest of the survey workflow.
+¹ weightflow takes design weights you already computed (`weighting_spec(..., base_weights=)`). It uses strata/PSU when it resamples replicates. It does not infer SRS / stratified / cluster from `N` / `N_h` the way `WeightPipe` / `svy.Design` / `survey::svydesign` do.
+
+Weightipy stays a focused raking library. weightpipe uses the same class of iterative raking as one `calibrate(method="raking")` step, then continues with eligibility, nonresponse, GREG, trim, balance, estimates, and planning. svy and R `survey` remain broader for GLM, categorical tests, and BRR/SDR.
 
 ### Numerical gold
 

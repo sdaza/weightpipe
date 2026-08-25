@@ -102,6 +102,7 @@ def linearized_estimate(
     strata: str | None = None,
     psu: str | None = None,
     level: float = 0.95,
+    mask: np.ndarray | None = None,
 ) -> pd.DataFrame:
     """Hájek point estimate with ultimate-cluster linearization SE (weights fixed)."""
     if estimand == "median":
@@ -122,6 +123,12 @@ def linearized_estimate(
     n = len(data)
     if len(w) != n:
         raise ValueError("weights length must match data rows")
+    if mask is not None:
+        mask_a = np.asarray(mask, dtype=bool)
+        if mask_a.shape[0] != n:
+            raise ValueError("mask length must match data rows")
+        w = w.copy()
+        w[~mask_a] = 0.0
     y = data[variable].to_numpy(dtype=float)
     x = None if denominator is None else data[denominator].to_numpy(dtype=float)
     point, z = linearized_residuals(w, y, estimand=estimand, x=x)

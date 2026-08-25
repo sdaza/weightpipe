@@ -9,7 +9,7 @@ from weightpipe.design import Design
 from weightpipe.diagnostics.balance import BalanceReport
 from weightpipe.diagnostics.balance import balance as _balance
 from weightpipe.diagnostics.margins import margins as _margins
-from weightpipe.estimate import estimate as _estimate
+from weightpipe.estimate import Estimation
 from weightpipe.recipe import Recipe
 from weightpipe.result import WeightResult
 from weightpipe.result import collect_weights as _collect_weights
@@ -23,7 +23,7 @@ class WeightPipe:
     computed lazily and cached, so estimating without any step works:
 
     >>> pipe = WeightPipe(df, N=10_000)
-    >>> pipe.estimate("y", variance="jackknife")  # doctest: +SKIP
+    >>> pipe.estimate.mean("y", variance="jackknife")  # doctest: +SKIP
 
     Steps return a new pipe, leaving the original untouched:
 
@@ -214,7 +214,16 @@ class WeightPipe:
             threshold=threshold,
         )
 
-    def estimate(self, variable: str, **kwargs: Any) -> pd.DataFrame:
-        """Estimate with recipe-aware bootstrap/jackknife, or linearized SE."""
-        kwargs.setdefault("fitted", self.result)
-        return _estimate(self._recipe, variable, **kwargs)
+    @property
+    def estimate(self) -> Estimation:
+        """Estimates with recipe-aware bootstrap/jackknife, or linearized SE.
+
+        Callable (``pipe.estimate("y", estimand="mean")``) and also
+        ``pipe.estimate.mean(["income", "food_share"], by="urban_rural")``.
+        """
+        return Estimation(self._recipe, fitted_fn=lambda: self.result)
+
+    @property
+    def estimation(self) -> Estimation:
+        """Alias of ``estimate`` (svy-style ``sample.estimation.mean``)."""
+        return self.estimate

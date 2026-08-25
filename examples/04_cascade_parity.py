@@ -64,15 +64,15 @@ print("steps:", pipe.diagnostics["steps_applied"])
 # %%
 print("bootstrap mean")
 print(
-    pipe.estimate("y", estimand="mean", variance="bootstrap", replicates=80, seed=1)
+    pipe.estimate.mean("y", variance="bootstrap", replicates=80, seed=1)
     .round(3)
     .to_string(index=False)
 )
 print("jackknife mean")
-print(pipe.estimate("y", estimand="mean", variance="jackknife").round(3).to_string(index=False))
+print(pipe.estimate.mean("y", variance="jackknife").round(3).to_string(index=False))
 print("jackknife proportion employed")
 print(
-    pipe.estimate("employed", estimand="proportion", variance="jackknife")
+    pipe.estimate.proportion("employed", variance="jackknife")
     .round(3)
     .to_string(index=False)
 )

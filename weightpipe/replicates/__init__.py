@@ -271,6 +271,18 @@ def jackknife_weights(
     )
 
 
+def _domain_weights(w: Any, mask: np.ndarray | None) -> np.ndarray:
+    """Zero weights outside a domain; used for ``by=`` estimands."""
+    ww = np.asarray(w, dtype=float)
+    if mask is None:
+        return ww
+    if mask.shape[0] != ww.shape[0]:
+        raise ValueError("mask length must match weights")
+    out = ww.copy()
+    out[~np.asarray(mask, dtype=bool)] = 0.0
+    return out
+
+
 def _replicate_estimate(
     result: BootstrapResult | JackknifeResult,
     statistic: Callable[[np.ndarray | pd.Series, pd.DataFrame], float],
@@ -340,9 +352,10 @@ def boot_total(
     variable: str,
     *,
     level: float = 0.95,
+    mask: np.ndarray | None = None,
 ) -> pd.DataFrame:
     def _stat(w: Any, d: pd.DataFrame) -> float:
-        ww = np.asarray(w, dtype=float)
+        ww = _domain_weights(w, mask)
         return float(np.nansum(ww * d[variable].to_numpy(dtype=float)))
 
     return _replicate_estimate(boot, _stat, level=level)
@@ -353,9 +366,10 @@ def boot_mean(
     variable: str,
     *,
     level: float = 0.95,
+    mask: np.ndarray | None = None,
 ) -> pd.DataFrame:
     def _stat(w: Any, d: pd.DataFrame) -> float:
-        ww = np.asarray(w, dtype=float)
+        ww = _domain_weights(w, mask)
         x = d[variable].to_numpy(dtype=float)
         ok = np.isfinite(x) & (ww > 0)
         denom = float(ww[ok].sum())
@@ -371,6 +385,7 @@ def boot_proportion(
     variable: str,
     *,
     level: float = 0.95,
+    mask: np.ndarray | None = None,
 ) -> pd.DataFrame:
     """Hájek proportion for a 0/1 (or boolean) variable."""
     from weightpipe.estimands import assert_proportion_binary, weighted_mean
@@ -383,7 +398,7 @@ def boot_proportion(
             xnum = xv.astype(float)
         else:
             xnum = pd.to_numeric(xv, errors="coerce")
-        return weighted_mean(w, xnum)
+        return weighted_mean(_domain_weights(w, mask), xnum)
 
     return _replicate_estimate(boot, _stat, level=level)
 
@@ -394,6 +409,7 @@ def boot_median(
     *,
     level: float = 0.95,
     p: float = 0.5,
+    mask: np.ndarray | None = None,
 ) -> pd.DataFrame:
     """Weighted quantile (default median) with replicate SE/CI."""
     from weightpipe.estimands import weighted_median
@@ -402,7 +418,7 @@ def boot_median(
         raise KeyError(f"variable not found: {variable}")
 
     def _stat(w: Any, d: pd.DataFrame) -> float:
-        return weighted_median(w, d[variable], p=p)
+        return weighted_median(_domain_weights(w, mask), d[variable], p=p)
 
     return _replicate_estimate(boot, _stat, level=level)
 
@@ -413,6 +429,7 @@ def boot_ratio(
     denominator: str,
     *,
     level: float = 0.95,
+    mask: np.ndarray | None = None,
 ) -> pd.DataFrame:
     """Ratio of weighted totals ``Σ w * numerator / Σ w * denominator``."""
     from weightpipe.estimands import weighted_ratio
@@ -423,7 +440,7 @@ def boot_ratio(
         raise KeyError(f"denominator variable not found: {denominator}")
 
     def _stat(w: Any, d: pd.DataFrame) -> float:
-        return weighted_ratio(w, d[numerator], d[denominator])
+        return weighted_ratio(_domain_weights(w, mask), d[numerator], d[denominator])
 
     return _replicate_estimate(boot, _stat, level=level)
 
