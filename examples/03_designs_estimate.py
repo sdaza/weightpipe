@@ -1,5 +1,5 @@
 # %% [markdown]
-# Sampling designs + estimate — mean / proportion / total / ratio / median / by=
+# Sampling designs + estimate — mean / proportion / total / ratio / median / by= / glm
 #
 # Open in Cursor/VS Code and use **Run Cell** on each `# %%` block.
 # Or: `uv run python examples/03_designs_estimate.py`
@@ -78,6 +78,12 @@ print(
 )
 print("median y (jackknife)")
 print(pipe_cl.estimate.median("y", variance="jackknife").round(3).to_string(index=False))
+print("design-based GLM (binomial, linearized SE)")
+print(
+    pipe_cl.estimate.glm("employed ~ urban_rural", family="binomial", variance="linearization")
+    .round(3)
+    .to_string(index=False)
+)
 
 # %%
 # --- Multi-stage from inclusion probabilities: w = 1/(p1*p2); psu = ultimate cluster ---

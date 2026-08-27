@@ -219,7 +219,8 @@ class WeightPipe:
         """Estimates with recipe-aware bootstrap/jackknife, or linearized SE.
 
         Callable (``pipe.estimate("y", estimand="mean")``) and also
-        ``pipe.estimate.mean(["income", "food_share"], by="urban_rural")``.
+        ``pipe.estimate.mean(["income", "food_share"], by="urban_rural")``
+        or ``pipe.estimate.glm("y ~ x", family="binomial")``.
         """
         return Estimation(self._recipe, fitted_fn=lambda: self.result)
 

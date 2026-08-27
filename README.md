@@ -4,7 +4,7 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Survey weighting in Python: define a sampling design, apply a weighting recipe, then estimate means, totals, proportions, ratios, and medians with bootstrap or jackknife standard errors.
+Survey weighting in Python: define a sampling design, apply a weighting recipe, then estimate means, totals, proportions, ratios, medians, and design-based GLMs with bootstrap, jackknife, or linearized standard errors.
 
 The point is one API for the whole path — design, eligibility, nonresponse, calibration, trim, estimates, and sample-size planning — instead of stitching specialized raking, weighting, and variance packages together.
 
@@ -59,6 +59,7 @@ pipe.diagnostics  # per-step diagnostics and alerts
 pipe.estimate.mean(["income", "food_share"], by="urban_rural")
 pipe.estimate.ratio(["food", "miles"], ["income", "trips"], by="urban_rural")
 pipe.estimate.median("y", variance="bootstrap", replicates=200, seed=1)
+pipe.estimate.glm("employed ~ region + age", family="binomial", variance="linearization")
 ```
 
 Design weights alone are enough to estimate:
@@ -175,6 +176,27 @@ The result is one row per variable × domain, with `estimate`, `se`, `cv`, and a
 Supported estimands: `mean`, `total`, `proportion`, `ratio`, `median`.  
 Variance: `bootstrap` (Rao–Wu; default) and `jackknife` (delete-a-PSU) re-run the recipe on each replicate so SEs include estimated weights. `linearization` is the fast ultimate-cluster Taylor SE that treats the fitted weights as fixed (survey-style). Median has no linearized SE.
 
+### Design-based GLM
+
+`pipe.estimate.glm` is `survey::svyglm`-style regression: survey-weighted IRLS for the coefficients, then design-based SEs. It is not a `statsmodels` / sklearn wrapper with weights passed through.
+
+```python
+pipe.estimate.glm("employed ~ region + age", family="binomial", variance="linearization")
+pipe.estimate.glm("y ~ region", family="gaussian", variance="jackknife")
+pipe.estimate.glm("count ~ age", family="poisson")
+pipe.estimate.glm("y ~ 1", family="gaussian", variance="linearization")  # intercept = Hájek mean
+```
+
+| `family=` | Link | Outcome |
+|-----------|------|---------|
+| `gaussian` (`normal`) | identity | continuous |
+| `binomial` (`logit`, `logistic`, `quasibinomial`) | logit | 0/1 |
+| `poisson` (`log`, `quasipoisson`) | log | counts |
+
+The result is one row per coefficient (`term`), with the same `estimate` / `se` / `cv` / CI columns as other estimands. Categorical predictors use sorted levels and drop the first (R treatment contrasts with alphabetical levels). An intercept-only gaussian matches `pipe.estimate.mean`; an intercept-only binomial is `logit` of the weighted proportion, not `svymean`.
+
+`variance=` is the same as for means: `linearization` is the Binder sandwich (ultimate-cluster, weights fixed); `bootstrap` / `jackknife` re-fit β on recipe-aware replicate weights. Gold matches `survey::svyglm`. There is no `by=` on GLM, and no tabs / Rao–Scott.
+
 ## Sample-size planning
 
 Plan sample sizes before fieldwork, then build a pipe after data collection:
@@ -220,12 +242,13 @@ Messages go to `stderr` through the `weightpipe` logger, so your own logging con
 `WeightPipe` wraps two objects you can also use directly: `Design` (sampling inputs and base weights) and `Recipe` (the adjustment steps, run with `prep()`). Reach for them when you want to hold a design or an unfitted recipe on its own, for example to build replicate weights by hand.
 
 ```python
-from weightpipe import Design, Recipe, estimate
+from weightpipe import Design, Recipe, estimate, estimate_glm
 
 design = Design(df, weight="pw", psu="psu", strata="stratum")
 recipe = Recipe.from_design(design).step_calibrate(method="raking", proportions=props)
 fitted = recipe.prep()
 estimate(recipe, ["y", "x"], by="region", fitted=fitted, variance="jackknife")
+estimate_glm(recipe, "employed ~ region", family="binomial", fitted=fitted, variance="linearization")
 ```
 
 ## Examples
@@ -234,7 +257,7 @@ Interactive scripts (run cell-by-cell or with Python):
 
 - [`examples/01_minimal_recipe.py`](examples/01_minimal_recipe.py) — design weights and bootstrap estimates
 - [`examples/02_nonresponse_raking.py`](examples/02_nonresponse_raking.py) — NR + raking
-- [`examples/03_designs_estimate.py`](examples/03_designs_estimate.py) — SRS / stratified / cluster / multi-stage; `estimate.mean(..., by=)`
+- [`examples/03_designs_estimate.py`](examples/03_designs_estimate.py) — SRS / stratified / cluster / multi-stage; `estimate.mean(..., by=)`; design-based GLM
 - [`examples/04_cascade_parity.py`](examples/04_cascade_parity.py) — full cascade + jackknife
 - [`examples/05_balance.py`](examples/05_balance.py) — covariate balance (SMD before/after)
 
@@ -248,9 +271,11 @@ Specialized packages still do one slice well.
 
 **Weighting recipes.** R [`weightflow`](https://CRAN.R-project.org/package=weightflow) is the closest recipe-style analogue (eligibility → NR → calibrate → trim, plus recipe-aware bootstrap/jackknife). R [`icarus`](https://CRAN.R-project.org/package=icarus) and [`ReGenesees`](https://github.com/DiegoZardetto/ReGenesees) are calibration-focused (raking, linear/GREG, official-statistics workflows).
 
-**Design-based analysis.** R [`survey`](https://CRAN.R-project.org/package=survey) is the usual toolkit once weights exist (`svydesign`, `svymean`, `svyby`, `svyglm`, `calibrate`, `rake`, `trimWeights`, `as.svrepdesign`). R [`srvyr`](https://CRAN.R-project.org/package=srvyr) is a dplyr front end on `survey`. [svy](https://svylab.com/svy) is the current Python analysis API (`svy.Design` + `sample.estimation.mean(..., by=...)`, GLM, tabs, BRR/SDR). It supersedes archived [`samplics`](https://pypi.org/project/samplics/), which already supported stratified/cluster estimation (`TaylorEstimator(..., stratum=, psu=)`) and sample selection (`SampleSelection`: SRS, systematic, PPS). samplics did **not** have a single design object — you passed those vectors on every call. That is an API gap, not missing design methods. Gold still matches samplics weighting helpers (rake, poststrat, class NR, GREG). weightpipe uses the same estimate shape after a recipe: `pipe.estimate.mean(["income", "food_share"], by="urban_rural")`.
+**Design-based analysis.** The current Python peer is [svy](https://svylab.com/svy) ([docs](https://svylab.com/docs/svy/)): one `svy.Design` + `svy.Sample`, then `.estimation`, `.weighting`, `.glm`, tabs, and BRR/SDR. It is the successor of archived [samplics](https://pypi.org/project/samplics/) (same author) and is validated against R [`survey`](https://CRAN.R-project.org/package=survey). In R, `survey` is still the usual toolkit once weights exist (`svydesign`, `svymean`, `svyby`, `svyglm`, `calibrate`, `rake`, `as.svrepdesign`); [`srvyr`](https://CRAN.R-project.org/package=srvyr) is a dplyr front end on it.
 
-**Planning and selection.** R [`sampler`](https://github.com/sdaza/sampler) is sample-size / allocation / MOE (weightpipe's planning gold). R [`PracTools`](https://CRAN.R-project.org/package=PracTools) and [`surveyplanning`](https://CRAN.R-project.org/package=surveyplanning) are other planning kits. R [`sampling`](https://CRAN.R-project.org/package=sampling) (Tillé) draws PPS / stratified samples; svy (and formerly samplics) also select samples. weightpipe plans sizes, then you attach the collected microdata — it does not draw the field sample.
+weightpipe is the recipe-first path: eligibility → NR → calibrate → trim on one `WeightPipe`, then the same estimate shape (`pipe.estimate.mean(["income", "food_share"], by="urban_rural")`, `pipe.estimate.glm("y ~ x", family="binomial")`). Use svy or R `survey` when you need sample *selection*, categorical tests, BRR/SDR, or small-area estimation ([`svy-sae`](https://svylab.com/svy)).
+
+**Planning and selection.** [svy](https://svylab.com/svy) draws probability samples (SRS, systematic, PPS, multi-stage) and plans sizes. R [`sampler`](https://github.com/sdaza/sampler) is weightpipe's planning gold. R [`PracTools`](https://CRAN.R-project.org/package=PracTools), [`surveyplanning`](https://CRAN.R-project.org/package=surveyplanning), and [`sampling`](https://CRAN.R-project.org/package=sampling) (Tillé) are other R kits. weightpipe plans sizes, then you attach the collected microdata — it does not draw the field sample.
 
 **Diagnostics.** Meta [`balance`](https://github.com/facebookresearch/balance) is covariate balance (SMD / Love plots), not a weighting recipe. weightpipe's `balance()` is the SMD before/after check; `margins()` checks calibration targets.
 
@@ -276,40 +301,42 @@ Marks mean the package has a first-class API for that row. "via `survey`" means 
 | BRR / SDR | | ✓ | | ✓ | | |
 | Domain estimates (`by=`) | ✓ | ✓ | | ✓ | via `survey` | |
 | Several variables at once | ✓ | ✓ | | ✓ | via `survey` | |
-| GLM / tabs / Rao–Scott | | ✓ | | ✓ | via `survey` | |
+| Design-based GLM | ✓ | ✓ | | ✓ | via `survey` | |
+| Tabs / Rao–Scott | | ✓ | | ✓ | via `survey` | |
 | Covariate balance (SMD) | ✓ | | | | | |
 | Sample-size planning / allocation | ✓ | ✓ | | | | ✓ |
 | Small-area estimation | | svy-sae | | | | |
 
 ¹ weightflow takes design weights you already computed (`weighting_spec(..., base_weights=)`). It uses strata/PSU when it resamples replicates. It does not infer SRS / stratified / cluster from `N` / `N_h` the way `WeightPipe` / `svy.Design` / `survey::svydesign` do.
 
-Weightipy stays a focused raking library. weightpipe uses the same class of iterative raking as one `calibrate(method="raking")` step, then continues with eligibility, nonresponse, GREG, trim, balance, estimates, and planning. svy and R `survey` remain broader for GLM, categorical tests, and BRR/SDR.
+Weightipy stays a focused raking library. weightpipe uses the same class of iterative raking as one `calibrate(method="raking")` step, then continues with eligibility, nonresponse, GREG, trim, balance, estimates (including design-based GLM), and planning. [svy](https://svylab.com/svy) and R `survey` remain broader for sample selection, categorical tests, tabs, BRR/SDR, and SAE.
 
 ### Numerical gold
 
-Shared methods are checked on the same toy frames against frozen CSVs in [`tests/gold/`](tests/gold/) (CI) and optionally live R / samplics. These are **correctness** checks, not runtime speed benchmarks.
+Shared methods are checked on the same toy frames against frozen CSVs in [`tests/gold/`](tests/gold/) (CI) and optionally live R / [svy](https://svylab.com/svy). These are **correctness** checks, not runtime speed benchmarks.
 
-| Method | R `survey` | R `weightflow` | samplics | R `sampler` |
-|--------|:----------:|:--------------:|:--------:|:-----------:|
+| Method | R `survey` | R `weightflow` | svy² | R `sampler` |
+|--------|:----------:|:--------------:|:----:|:-----------:|
 | Unknown eligibility | | ✓ | | |
 | Drop ineligible | | ✓ | | |
 | Weighting-class NR | | ✓ | ✓ | |
 | Raking | ✓ | ✓ | ✓ | |
 | Post-stratification | ✓ | ✓ | ✓ | |
-| Linear / GREG | ✓ | ✓ | ✓¹ | |
+| Linear / GREG | ✓ | ✓ | ✓ | |
 | Trim (value cap, no redistribute) | | ✓ | | |
 | NR → raking cascade | | ✓ | | |
 | Full cascade (eligibility → trim) | | ✓ | | |
 | Mean, total, ratio, median | ✓ | | | |
+| Design-based GLM | ✓ | | | |
 | Sample size / allocation / MOE | | | | ✓ |
 
-¹ Linear calibration vs samplics is a live check (`gold` extra), not a frozen CSV.
+² Frozen `*_svy.csv` plus live checks from `uv sync --extra gold`.
 
-Tolerances are tight (`1e-12`–`1e-6` depending on the solver). Median vs `survey::svyquantile` may differ by one unique *y* value because quantile definitions can differ. Logit propensity uses the same `1/p` adjustment as weightflow, but sklearn vs R `glm` coefficients are not bit-matched.
+Tolerances are tight (`1e-12`–`1e-6` depending on the solver). Median vs `survey::svyquantile` may differ by one unique *y* value because quantile definitions can differ. Design-based GLM coefficients and linearized SEs match `survey::svyglm` (gaussian / quasibinomial / quasipoisson). Logit propensity uses the same `1/p` adjustment as weightflow, but sklearn vs R `glm` coefficients are not bit-matched.
 
 ## Gold testing
 
-Gold tests compare weightpipe to frozen reference outputs (and optionally live samplics / R) on the same toy inputs. CSVs live in [`tests/gold/`](tests/gold/).
+Gold tests compare weightpipe to frozen reference outputs (and optionally live svy / R) on the same toy inputs. CSVs live in [`tests/gold/`](tests/gold/). Python weighting gold is [svy](https://svylab.com/svy); estimands and GLM gold are R `survey`.
 
 **Run the gold suite** (same idea as CI):
 
@@ -324,12 +351,12 @@ Or run everything (unit tests + gold):
 uv run --extra gold pytest -q
 ```
 
-Frozen CSV checks always run when the files are present. Live samplics needs the `gold` extra; live R checks need R packages and optionally `uv sync --extra r-gold`.
+Frozen CSV checks always run when the files are present. Live svy checks need the `gold` extra. Live R checks need R packages and optionally `uv sync --extra r-gold`.
 
 **Regenerate frozen CSVs** (local only — not CI). Do this when a reference tool or gold scenario intentionally changes, then commit the updated files under `tests/gold/`:
 
 ```bash
-uv run --extra gold python tests/gold/generate_samplics_gold.py
+uv run --extra gold python tests/gold/generate_svy_gold.py
 Rscript tests/gold/generate_r_gold.R          # needs R packages survey + weightflow
 Rscript tests/gold/generate_sampler_gold.R    # needs R package sampler (or SAMPLER_R_DIR)
 ```

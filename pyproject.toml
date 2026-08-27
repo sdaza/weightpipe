@@ -38,9 +38,9 @@ plot = [
 r-gold = [
     "rpy2>=3.5.16",
 ]
-# Live Python reference comparisons (samplics is archived; used as frozen gold).
+# Live Python reference comparisons (svy; CI installs this extra).
 gold = [
-    "samplics>=0.4.0",
+    "svy>=0.25.0",
 ]
 
 [project.urls]

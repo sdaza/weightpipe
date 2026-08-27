@@ -255,6 +255,40 @@ write.csv(
   row.names = FALSE
 )
 
+# ---------------------------------------------------------------------------
+# survey: design-based GLM (svyglm)
+# ---------------------------------------------------------------------------
+d_glm <- data.frame(
+  stratum = factor(c("A", "A", "A", "A", "B", "B", "B", "B")),
+  psu = factor(c(1, 1, 2, 2, 3, 3, 4, 4)),
+  region = factor(c("N", "N", "S", "S", "N", "N", "S", "S"), levels = c("N", "S")),
+  age = c(20, 40, 30, 50, 22, 38, 28, 52),
+  y = c(10, 12, 20, 22, 11, 13, 21, 23),
+  employed = c(1, 0, 1, 1, 0, 1, 1, 0),
+  count = c(0, 1, 2, 1, 0, 2, 3, 1),
+  pw = rep(1, 8)
+)
+des_glm <- svydesign(ids = ~psu, strata = ~stratum, weights = ~pw, data = d_glm, nest = TRUE)
+pack_svyglm <- function(fit, family, formula) {
+  cf <- coef(fit)
+  se <- as.numeric(SE(fit))
+  data.frame(
+    family = family,
+    formula = formula,
+    term = names(cf),
+    estimate_r_survey = as.numeric(cf),
+    se_r_survey = se,
+    stringsAsFactors = FALSE
+  )
+}
+glm_gold <- rbind(
+  pack_svyglm(svyglm(y ~ region + age, des_glm, family = gaussian()), "gaussian", "y ~ region + age"),
+  pack_svyglm(svyglm(employed ~ region, des_glm, family = quasibinomial()), "binomial", "employed ~ region"),
+  pack_svyglm(svyglm(count ~ age, des_glm, family = quasipoisson()), "poisson", "count ~ age"),
+  pack_svyglm(svyglm(y ~ 1, des_glm, family = gaussian()), "gaussian", "y ~ 1")
+)
+write.csv(glm_gold, file.path(out_dir, "glm_r_survey.csv"), row.names = FALSE)
+
 # legacy cascade NR+rake file (still useful)
 df_legacy <- data.frame(
   unit_id = 1:6,

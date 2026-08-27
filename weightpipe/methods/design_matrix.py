@@ -5,7 +5,7 @@ from typing import Any
 import pandas as pd
 
 
-def parse_formula(formula: str | list[str] | tuple[str, ...]) -> list[str]:
+def parse_formula(formula: str | list[str] | tuple[str, ...], *, allow_intercept_only: bool = False) -> list[str]:
     """Parse ``~ a + b`` or a list of term names into term strings."""
     if isinstance(formula, (list, tuple)):
         terms = [str(t).strip() for t in formula if str(t).strip()]
@@ -14,7 +14,10 @@ def parse_formula(formula: str | list[str] | tuple[str, ...]) -> list[str]:
         if s.startswith("~"):
             s = s[1:].strip()
         terms = [t.strip() for t in s.split("+") if t.strip()]
+    terms = [t for t in terms if t != "1"]
     if not terms:
+        if allow_intercept_only:
+            return []
         raise ValueError("formula must include at least one term")
     return terms
 
@@ -24,6 +27,7 @@ def design_matrix(
     formula: str | list[str] | tuple[str, ...],
     *,
     drop_first: bool = True,
+    allow_intercept_only: bool = False,
 ) -> pd.DataFrame:
     """Intercept + numeric columns + dummy-coded categoricals.
 
@@ -31,7 +35,7 @@ def design_matrix(
     ``drop_first=True`` (default), the first sorted level is the reference
     so the matrix has full column rank with the intercept.
     """
-    terms = parse_formula(formula)
+    terms = parse_formula(formula, allow_intercept_only=allow_intercept_only)
     missing = [t for t in terms if t not in data.columns]
     if missing:
         raise KeyError(f"formula term(s) not found: {missing}")

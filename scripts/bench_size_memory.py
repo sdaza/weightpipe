@@ -89,16 +89,15 @@ def job_rake_weightpipe(df: pd.DataFrame) -> None:
     _ = pipe.weights
 
 
-def job_rake_samplics(df: pd.DataFrame) -> None:
-    from samplics.weighting import SampleWeight
+def job_rake_svy(df: pd.DataFrame) -> None:
+    import polars as pl
+    from svy import Design, Sample
 
     control = _rake_controls(df)
-    SampleWeight().rake(
-        samp_weight=df["pw"],
-        margins={"sex": df["sex"], "region": df["region"], "educ": df["educ"]},
-        control=control,
+    Sample(data=pl.from_pandas(df), design=Design(wgt="pw")).weighting.rake(
+        controls=control,
+        wgt_name="rk_wgt",
         tol=1e-6,
-        ctrl_tol=1e-6,
         max_iter=50,
     )
 
@@ -175,7 +174,7 @@ def job_lin_cascade_weightpipe(df: pd.DataFrame) -> None:
 JOBS = {
     "baseline": job_baseline,
     "rake_weightpipe": job_rake_weightpipe,
-    "rake_samplics": job_rake_samplics,
+    "rake_svy": job_rake_svy,
     "rake_weightipy": job_rake_weightipy,
     "linear_weightpipe": job_linear_weightpipe,
     "cascade_weightpipe": job_cascade_weightpipe,
@@ -188,8 +187,9 @@ def preload(job: str) -> None:
     """Import libraries before the timer so wall time is the weighting call."""
     if job == "baseline":
         return
-    if job == "rake_samplics":
-        from samplics.weighting import SampleWeight  # noqa: F401
+    if job == "rake_svy":
+        import polars as pl  # noqa: F401
+        from svy import Design, Sample  # noqa: F401
 
         return
     if job == "rake_weightipy":
@@ -228,11 +228,11 @@ def run_worker(job: str, n: int, n_psu: int | None) -> dict[str, object]:
 
 
 def probe_optional() -> dict[str, bool]:
-    out = {"samplics": False, "weightipy": False}
+    out = {"svy": False, "weightipy": False}
     try:
-        import samplics  # noqa: F401
+        import svy  # noqa: F401
 
-        out["samplics"] = True
+        out["svy"] = True
     except ImportError:
         pass
     try:
@@ -268,8 +268,8 @@ def plan(quick: bool, available: dict[str, bool]) -> list[tuple[str, int, int | 
     sizes = SIZES_QUICK if quick else SIZES_DEFAULT
     var_sizes = VAR_SIZES_QUICK if quick else VAR_SIZES_DEFAULT
     jobs = ["baseline", "rake_weightpipe"]
-    if available["samplics"]:
-        jobs.append("rake_samplics")
+    if available["svy"]:
+        jobs.append("rake_svy")
     if available["weightipy"]:
         jobs.append("rake_weightipy")
     jobs.extend(["linear_weightpipe", "cascade_weightpipe"])
@@ -321,7 +321,7 @@ def main() -> int:
     rows = plan(args.quick, available)
     print(
         f"machine={platform.machine()} python={platform.python_version()} "
-        f"samplics={available['samplics']} weightipy={available['weightipy']} "
+        f"svy={available['svy']} weightipy={available['weightipy']} "
         f"jobs={len(rows)}",
         flush=True,
     )

@@ -1,0 +1,9 @@
+"family","formula","term","estimate_r_survey","se_r_survey"
+"gaussian","y ~ region + age","(Intercept)",8.55882352941177,0.252114443065136
+"gaussian","y ~ region + age","regionS",9.01960784313725,0.776573983618354
+"gaussian","y ~ region + age","age",0.0980392156862745,0.00941945405613225
+"binomial","employed ~ region","(Intercept)",-9.59810394344924e-16,7.55033286377907e-16
+"binomial","employed ~ region","regionS",1.09861228866514,0.942809041580665
+"poisson","count ~ age","(Intercept)",-0.110366812106848,1.58863973266059
+"poisson","count ~ age","age",0.00936864891218654,0.0370960622776035
+"gaussian","y ~ 1","(Intercept)",16.5,3.53553390593274

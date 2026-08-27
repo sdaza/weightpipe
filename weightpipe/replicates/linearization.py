@@ -53,6 +53,36 @@ def ultimate_cluster_variance(
     return var, n_psu, tuple(lonely)
 
 
+def ultimate_cluster_covariance(
+    z: np.ndarray,
+    strata: np.ndarray,
+    psu: np.ndarray,
+) -> tuple[np.ndarray, int, tuple[str, ...]]:
+    """PSU-total covariance of a unit-level score matrix ``z`` (n × p)."""
+    z = np.asarray(z, dtype=float)
+    if z.ndim == 1:
+        z = z.reshape(-1, 1)
+    n, p = z.shape
+    if n != len(strata) or n != len(psu):
+        raise ValueError("z, strata, and psu lengths must match")
+    var = np.zeros((p, p), dtype=float)
+    n_psu = 0
+    lonely: list[str] = []
+    for h in pd.unique(strata):
+        idx = np.where(strata == h)[0]
+        psus = pd.unique(psu[idx])
+        nh = len(psus)
+        if nh < 2:
+            lonely.append(str(h))
+            continue
+        totals = np.array([z[idx][psu[idx] == q].sum(axis=0) for q in psus], dtype=float)
+        mean_t = totals.mean(axis=0)
+        centered = totals - mean_t
+        var += (nh / (nh - 1.0)) * (centered.T @ centered)
+        n_psu += nh
+    return var, n_psu, tuple(lonely)
+
+
 def linearized_residuals(
     weights: np.ndarray,
     y: np.ndarray,

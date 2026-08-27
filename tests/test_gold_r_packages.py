@@ -18,6 +18,7 @@ from weightpipe.methods.nonresponse import weighting_class_nonresponse
 from weightpipe.methods.poststrat import poststratify
 from weightpipe.methods.raking import rake
 from weightpipe.methods.trim import trim_weights
+from weightpipe.pipeline import WeightPipe
 
 GOLD = Path(__file__).resolve().parent / "gold"
 pytestmark = pytest.mark.gold
@@ -45,6 +46,21 @@ def _estimand_toy() -> pd.DataFrame:
         {
             "y": [10.0, 12.0, 20.0, 22.0, 11.0, 13.0, 21.0, 23.0],
             "x": [2.0, 2.0, 4.0, 4.0, 2.0, 2.0, 4.0, 4.0],
+            "pw": [1.0] * 8,
+        }
+    )
+
+
+def _glm_toy() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "stratum": ["A", "A", "A", "A", "B", "B", "B", "B"],
+            "psu": [1, 1, 2, 2, 3, 3, 4, 4],
+            "region": ["N", "N", "S", "S", "N", "N", "S", "S"],
+            "age": [20.0, 40.0, 30.0, 50.0, 22.0, 38.0, 28.0, 52.0],
+            "y": [10.0, 12.0, 20.0, 22.0, 11.0, 13.0, 21.0, 23.0],
+            "employed": [1, 0, 1, 1, 0, 1, 1, 0],
+            "count": [0, 1, 2, 1, 0, 2, 3, 1],
             "pw": [1.0] * 8,
         }
     )
@@ -110,6 +126,29 @@ def test_estimands_match_r_survey_csv() -> None:
         assert weighted_total(df["pw"], df["y"]) == pytest.approx(expected["total"], rel=1e-10)
     assert weighted_ratio(df["pw"], df["y"], df["x"]) == pytest.approx(expected["ratio"], rel=1e-10)
     _assert_median_vs_survey(weighted_median(df["pw"], df["y"]), expected["median"], df["y"])
+
+
+def test_glm_matches_r_survey_csv() -> None:
+    g = _read_optional("glm_r_survey.csv")
+    if g is None:
+        pytest.skip("missing tests/gold/glm_r_survey.csv — run generate_r_gold.R")
+    pipe = WeightPipe(_glm_toy(), weight="pw", psu="psu", strata="stratum")
+    for (family, formula), gold in g.groupby(["family", "formula"], sort=False):
+        ours = pipe.estimate.glm(str(formula), family=str(family), variance="linearization")
+        merged = ours.merge(gold, on="term", how="inner")
+        assert len(merged) == len(gold)
+        np.testing.assert_allclose(
+            merged["estimate"].to_numpy(),
+            merged["estimate_r_survey"].to_numpy(),
+            rtol=1e-8,
+            atol=1e-8,
+        )
+        np.testing.assert_allclose(
+            merged["se"].to_numpy(),
+            merged["se_r_survey"].to_numpy(),
+            rtol=1e-6,
+            atol=1e-8,
+        )
 
 
 def test_unknown_eligibility_matches_weightflow_csv() -> None:
@@ -336,3 +375,51 @@ def test_cascade_matches_weightflow_live() -> None:
         warn=False,
     )
     np.testing.assert_allclose(w.to_numpy(), theirs, rtol=1e-6, atol=1e-6)
+
+
+def test_glm_matches_r_survey_live() -> None:
+    _require_r_package("survey")
+    from rpy2 import robjects as ro
+    from rpy2.robjects import pandas2ri
+    from rpy2.robjects.conversion import localconverter
+
+    df = _glm_toy()
+    pipe = WeightPipe(df, weight="pw", psu="psu", strata="stratum")
+    with localconverter(ro.default_converter + pandas2ri.converter):
+        r_df = ro.conversion.py2rpy(df)
+    ro.globalenv["d"] = r_df
+    ro.r(
+        """
+        d$stratum <- factor(d$stratum)
+        d$psu <- factor(d$psu)
+        d$region <- factor(d$region, levels=c('N','S'))
+        des <- survey::svydesign(ids=~psu, strata=~stratum, weights=~pw, data=d, nest=TRUE)
+        g <- survey::svyglm(y ~ region + age, des, family=gaussian())
+        b <- survey::svyglm(employed ~ region, des, family=quasibinomial())
+        p <- survey::svyglm(count ~ age, des, family=quasipoisson())
+        i <- survey::svyglm(y ~ 1, des, family=gaussian())
+        g_est <- as.numeric(coef(g)); g_se <- as.numeric(SE(g)); g_nm <- names(coef(g))
+        b_est <- as.numeric(coef(b)); b_se <- as.numeric(SE(b)); b_nm <- names(coef(b))
+        p_est <- as.numeric(coef(p)); p_se <- as.numeric(SE(p)); p_nm <- names(coef(p))
+        i_est <- as.numeric(coef(i)); i_se <- as.numeric(SE(i)); i_nm <- names(coef(i))
+        """
+    )
+
+    def _r_fit(prefix: str) -> tuple[list[str], np.ndarray, np.ndarray]:
+        names = [str(x) for x in ro.r(f"{prefix}_nm")]
+        est = np.array(list(ro.r(f"{prefix}_est")), dtype=float)
+        se = np.array(list(ro.r(f"{prefix}_se")), dtype=float)
+        return names, est, se
+
+    checks = [
+        ("y ~ region + age", "gaussian", "g"),
+        ("employed ~ region", "binomial", "b"),
+        ("count ~ age", "poisson", "p"),
+        ("y ~ 1", "gaussian", "i"),
+    ]
+    for formula, family, prefix in checks:
+        ours = pipe.estimate.glm(formula, family=family, variance="linearization")
+        names, est, se = _r_fit(prefix)
+        assert list(ours["term"]) == names
+        np.testing.assert_allclose(ours["estimate"].to_numpy(), est, rtol=1e-8, atol=1e-8)
+        np.testing.assert_allclose(ours["se"].to_numpy(), se, rtol=1e-6, atol=1e-8)

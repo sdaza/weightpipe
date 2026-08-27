@@ -3,7 +3,7 @@
 from weightpipe._logging import set_log_level, setup_logging
 from weightpipe.design import Design
 from weightpipe.diagnostics import BalanceReport, balance, design_effect, ess, margins
-from weightpipe.estimate import Estimation, estimate, point_estimate
+from weightpipe.estimate import Estimation, estimate, estimate_glm, point_estimate
 from weightpipe.frame import WeightFrame
 from weightpipe.methods import design_matrix, population_totals
 from weightpipe.pipeline import WeightPipe
@@ -61,6 +61,7 @@ __all__ = [
     "design_matrix",
     "ess",
     "estimate",
+    "estimate_glm",
     "jack_mean",
     "jack_median",
     "jack_proportion",
