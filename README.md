@@ -1,8 +1,12 @@
 # weightpipe
 
 [![CI](https://github.com/sdaza/weightpipe/actions/workflows/ci.yml/badge.svg)](https://github.com/sdaza/weightpipe/actions/workflows/ci.yml)
-[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Release](https://img.shields.io/github/v/release/sdaza/weightpipe?label=release)](https://github.com/sdaza/weightpipe/releases)
+[![PyPI](https://img.shields.io/pypi/v/weightpipe?label=pypi)](https://pypi.org/project/weightpipe/)
+[![Python >=3.11](https://img.shields.io/badge/Python-%3E%3D3.11-blue)](https://pypi.org/project/weightpipe/)
+[![Monthly downloads](https://static.pepy.tech/badge/weightpipe/month)](https://pepy.tech/project/weightpipe)
+[![Stars](https://img.shields.io/github/stars/sdaza/weightpipe?label=stars)](https://github.com/sdaza/weightpipe/stargazers)
+[![License](https://img.shields.io/pypi/l/weightpipe)](https://github.com/sdaza/weightpipe/blob/main/LICENSE)
 
 Survey weighting in Python: define a sampling design, apply a weighting recipe, then estimate means, totals, proportions, ratios, medians, and design-based GLMs with bootstrap, jackknife, or linearized standard errors.
 
@@ -10,15 +14,23 @@ The point is one API for the whole path — design, eligibility, nonresponse, ca
 
 ## Install
 
-Install from GitHub (latest `main`):
+Requires Python 3.11+.
+
+### From PyPI (recommended)
+
+```bash
+pip install weightpipe
+# or
+uv add weightpipe
+```
+
+### From GitHub (latest `main`)
 
 ```bash
 pip install "git+https://github.com/sdaza/weightpipe.git"
 # or
 uv add "git+https://github.com/sdaza/weightpipe.git"
 ```
-
-Requires Python 3.11+. Not published on PyPI yet.
 
 ## Quickstart
 
