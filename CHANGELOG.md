@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.1](https://github.com/sdaza/weightpipe/compare/v0.1.0...v0.1.1) (2026-09-04)
+
+
+### Bug Fixes
+
+* vectorize linearization variance and accept Series in balance(before=) ([ff577e8](https://github.com/sdaza/weightpipe/commit/ff577e85cb4acd729ed3baf0768892f0b1da4ae2))
+* vectorize linearization variance and accept Series in balance(before=) ([9532973](https://github.com/sdaza/weightpipe/commit/9532973906293a71dff4b921b6b901e8e7ac3ccf))
+
 ## [0.1.0] - 2026-08-28
 
 ### Added
