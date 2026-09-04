@@ -80,4 +80,4 @@ __all__ = [
     "weight_factors",
 ]
 
-__version__ = "0.1.2"
+__version__ = "0.1.3"
