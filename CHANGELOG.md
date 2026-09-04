@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.2](https://github.com/sdaza/weightpipe/compare/v0.1.1...v0.1.2) (2026-09-04)
+
+
+### Bug Fixes
+
+* unblock release publishing on version bumps ([fd32a30](https://github.com/sdaza/weightpipe/commit/fd32a30996b682759a13e1c147fb57d1c5e848e0))
+* unblock release publishing on version bumps ([b6ba0b6](https://github.com/sdaza/weightpipe/commit/b6ba0b6b3de5b9fd15b95b60ed5bc4e78aaf6133))
+
 ## [0.1.1](https://github.com/sdaza/weightpipe/compare/v0.1.0...v0.1.1) (2026-09-04)
 
 
