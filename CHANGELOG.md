@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.0 (2026-09-04)
+
+
+### Bug Fixes
+
+* bootstrap automated patch releases ([ebfe47b](https://github.com/sdaza/weightpipe/commit/ebfe47bf713d1e33f53c0cbb886edc930ea2e1b6))
+* bootstrap automated patch releases ([b2a5ea0](https://github.com/sdaza/weightpipe/commit/b2a5ea09b2a64c48c003ec323913a452d29c52fc))
+
 ## [0.1.0] - 2026-08-28
 
 ### Added
