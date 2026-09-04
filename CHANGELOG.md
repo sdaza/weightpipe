@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.3](https://github.com/sdaza/weightpipe/compare/v0.1.2...v0.1.3) (2026-09-04)
+
+
+### Documentation
+
+* use pepy downloads badge to avoid shields rate limiting ([a868bc6](https://github.com/sdaza/weightpipe/commit/a868bc696b12154637e4121136062fa981d89d01))
+* use pepy downloads badge to avoid shields rate limiting ([ed61be9](https://github.com/sdaza/weightpipe/commit/ed61be95ab422f882cbb370aef43be4a18eab5a6))
+
 ## [0.1.2](https://github.com/sdaza/weightpipe/compare/v0.1.1...v0.1.2) (2026-09-04)
 
 
