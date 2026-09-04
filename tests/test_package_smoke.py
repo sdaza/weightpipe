@@ -1,5 +1,8 @@
 """Smoke tests for the public package surface."""
 
+import tomllib
+from pathlib import Path
+
 import pandas as pd
 import pytest
 
@@ -7,7 +10,12 @@ from weightpipe import Recipe, WeightFrame, WeightResult, __version__
 
 
 def test_version() -> None:
-    assert __version__ == "0.1.0"
+    # Releases bump pyproject.toml and __init__.py together; keep them in step.
+    pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
+    if not pyproject.is_file():
+        pytest.skip("pyproject.toml is not available outside a source checkout")
+    declared = tomllib.loads(pyproject.read_text(encoding="utf-8"))["project"]["version"]
+    assert __version__ == declared
 
 
 def test_weight_frame_from_base(toy_sample: pd.DataFrame) -> None:

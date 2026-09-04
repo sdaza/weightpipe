@@ -39,7 +39,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install dependencies
-        run: uv sync --all-groups --extra gold --locked
+        run: uv sync --all-groups --extra gold --frozen
 
       - name: Lint
         run: uv run ruff check
