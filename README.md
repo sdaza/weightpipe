@@ -4,7 +4,7 @@
 [![Release](https://img.shields.io/github/v/release/sdaza/weightpipe?label=release)](https://github.com/sdaza/weightpipe/releases)
 [![PyPI](https://img.shields.io/pypi/v/weightpipe?label=pypi)](https://pypi.org/project/weightpipe/)
 [![Python >=3.11](https://img.shields.io/badge/Python-%3E%3D3.11-blue)](https://pypi.org/project/weightpipe/)
-[![Monthly downloads](https://img.shields.io/pypi/dm/weightpipe?label=downloads)](https://pypistats.org/packages/weightpipe)
+[![Monthly downloads](https://static.pepy.tech/badge/weightpipe/month)](https://pepy.tech/project/weightpipe)
 [![Stars](https://img.shields.io/github/stars/sdaza/weightpipe?label=stars)](https://github.com/sdaza/weightpipe/stargazers)
 [![License](https://img.shields.io/pypi/l/weightpipe)](https://github.com/sdaza/weightpipe/blob/main/LICENSE)
 
