@@ -93,6 +93,27 @@ def test_top_level_balance_matches_pipe(skewed_sample: pd.DataFrame) -> None:
     assert a.summary["max_abs_smd_after"] == pytest.approx(b.summary["max_abs_smd_after"])
 
 
+def test_balance_before_series_uses_respondent_weights() -> None:
+    # Universe includes nonrespondents with base_weight=1; default before="base"
+    # would compare the population to itself.
+    sample = pd.DataFrame(
+        {
+            "age": [20.0, 22.0, 24.0, 50.0, 52.0, 54.0],
+            "responded": [1, 1, 1, 0, 0, 0],
+            "pw": [1.0] * 6,
+        }
+    )
+    pop = pd.DataFrame({"age": [20.0, 22.0, 24.0, 50.0, 52.0, 54.0], "N": [1.0] * 6})
+    pipe = WeightPipe(sample, weight="pw")
+    respondent_weights = sample["pw"] * sample["responded"]
+    report = pipe.balance(["age"], target=pop, target_weight="N", before=respondent_weights)
+    assert isinstance(report, BalanceReport)
+    assert not report.table.empty
+    smd_before = report.table["smd_before"].to_numpy(dtype=float)
+    assert np.isfinite(smd_before).any()
+    assert not np.allclose(smd_before, 0.0)
+
+
 def test_balance_ess_in_summary(skewed_sample: pd.DataFrame) -> None:
     props = {"sex": {"M": 0.4, "F": 0.6}}
     pipe = WeightPipe(skewed_sample, weight="pw").calibrate(

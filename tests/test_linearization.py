@@ -5,7 +5,13 @@ import pandas as pd
 import pytest
 
 from weightpipe import Design, Recipe, WeightPipe, estimate
-from weightpipe.replicates.linearization import linearized_estimate, linearized_residuals, ultimate_cluster_variance
+from weightpipe.replicates.linearization import (
+    _stratum_psu_codes,
+    linearized_estimate,
+    linearized_residuals,
+    ultimate_cluster_covariance,
+    ultimate_cluster_variance,
+)
 
 
 def test_linearized_mean_hand_calc() -> None:
@@ -159,3 +165,144 @@ def test_linearization_matches_r_survey_live() -> None:
     assert ours_tot["se"].iloc[0] == pytest.approx(float(np.array(list(ro.r("tot_se")))[0]), rel=1e-8)
     assert ours_rat["estimate"].iloc[0] == pytest.approx(float(np.array(list(ro.r("rat_est")))[0]), rel=1e-10)
     assert ours_rat["se"].iloc[0] == pytest.approx(float(np.array(list(ro.r("rat_se")))[0]), rel=1e-6)
+
+
+def _loop_ultimate_cluster_variance(
+    z: np.ndarray,
+    strata: np.ndarray,
+    psu: np.ndarray,
+) -> tuple[float, int, tuple[str, ...]]:
+    """Pre-vectorization PSU loop (reference for regression tests)."""
+    z = np.asarray(z, dtype=float)
+    var = 0.0
+    n_psu = 0
+    lonely: list[str] = []
+    for h in pd.unique(strata):
+        idx = np.where(strata == h)[0]
+        psus = pd.unique(psu[idx])
+        nh = len(psus)
+        if nh < 2:
+            lonely.append(str(h))
+            continue
+        totals = np.array([float(z[idx][psu[idx] == p].sum()) for p in psus], dtype=float)
+        mean_t = float(totals.mean())
+        var += (nh / (nh - 1.0)) * float(np.sum((totals - mean_t) ** 2))
+        n_psu += nh
+    return var, n_psu, tuple(lonely)
+
+
+def _loop_ultimate_cluster_covariance(
+    z: np.ndarray,
+    strata: np.ndarray,
+    psu: np.ndarray,
+) -> tuple[np.ndarray, int, tuple[str, ...]]:
+    z = np.asarray(z, dtype=float)
+    if z.ndim == 1:
+        z = z.reshape(-1, 1)
+    n, p = z.shape
+    var = np.zeros((p, p), dtype=float)
+    n_psu = 0
+    lonely: list[str] = []
+    for h in pd.unique(strata):
+        idx = np.where(strata == h)[0]
+        psus = pd.unique(psu[idx])
+        nh = len(psus)
+        if nh < 2:
+            lonely.append(str(h))
+            continue
+        totals = np.array([z[idx][psu[idx] == q].sum(axis=0) for q in psus], dtype=float)
+        mean_t = totals.mean(axis=0)
+        centered = totals - mean_t
+        var += (nh / (nh - 1.0)) * (centered.T @ centered)
+        n_psu += nh
+    return var, n_psu, tuple(lonely)
+
+
+def _small_designs() -> list[tuple[pd.DataFrame, str | None, str | None, np.ndarray | None]]:
+    rng = np.random.default_rng(0)
+    n = 48
+    y = rng.normal(size=n)
+    x = rng.normal(loc=2.0, scale=0.5, size=n)
+    binary = (y > 0).astype(float)
+    w = rng.uniform(0.5, 2.0, size=n)
+    psu = np.repeat(np.arange(12), 4)
+    strata = np.repeat(["A", "B", "C"], 16)
+    lonely = np.array(["L"] + ["M"] * 47)
+    mask = rng.random(n) > 0.3
+    df = pd.DataFrame({"y": y, "x": x, "bin": binary, "pw": w, "psu": psu, "stratum": strata, "lonely": lonely})
+    return [
+        (df, None, None, None),
+        (df, None, "psu", None),
+        (df, "stratum", None, None),
+        (df, "stratum", "psu", None),
+        (df, "stratum", "psu", mask),
+        (df, "lonely", "psu", None),
+    ]
+
+
+def test_vectorized_variance_matches_psu_loop() -> None:
+    df, *_ = _small_designs()[3]
+    z = (df["pw"].to_numpy() * (df["y"].to_numpy() - df["y"].mean())).astype(float)
+    st = df["stratum"].astype(str).to_numpy()
+    psu = df["psu"].astype(str).to_numpy()
+    got = ultimate_cluster_variance(z, st, psu)
+    ref = _loop_ultimate_cluster_variance(z, st, psu)
+    assert got[1:] == ref[1:]
+    assert got[0] == ref[0]
+    z2 = np.column_stack([z, z * 0.5, np.ones_like(z)])
+    cov_got = ultimate_cluster_covariance(z2, st, psu)
+    cov_ref = _loop_ultimate_cluster_covariance(z2, st, psu)
+    assert cov_got[1:] == cov_ref[1:]
+    np.testing.assert_array_equal(cov_got[0], cov_ref[0])
+
+
+@pytest.mark.filterwarnings("ignore:Strata with a single PSU:RuntimeWarning")
+@pytest.mark.parametrize(
+    "estimand,variable,denominator",
+    [("mean", "y", None), ("total", "y", None), ("proportion", "bin", None), ("ratio", "y", "x")],
+)
+def test_linearized_estimate_matches_loop_se(estimand: str, variable: str, denominator: str | None) -> None:
+    for df, strata, psu, mask in _small_designs():
+        w = df["pw"].to_numpy(dtype=float).copy()
+        if mask is not None:
+            w = w.copy()
+            w[~mask] = 0.0
+        kwargs: dict[str, object] = {"estimand": estimand, "strata": strata, "psu": psu, "mask": mask}
+        if denominator is not None:
+            kwargs["denominator"] = denominator
+        out = linearized_estimate(df["pw"], df, variable, **kwargs)  # type: ignore[arg-type]
+        y = df[variable].to_numpy(dtype=float)
+        x = None if denominator is None else df[denominator].to_numpy(dtype=float)
+        point, z = linearized_residuals(w, y, estimand=estimand, x=x)  # type: ignore[arg-type]
+        st, cl = _stratum_psu_codes(df, len(df), strata, psu)
+        var, n_psu, _lonely = _loop_ultimate_cluster_variance(z, st, cl)
+        se = float(np.sqrt(var))
+        assert out["estimate"].iloc[0] == point
+        assert out["se"].iloc[0] == se
+        assert out["R_used"].iloc[0] == n_psu
+        assert list(out.columns) == ["estimate", "se", "ci_lower", "ci_upper", "level", "R_used"]
+
+
+def test_linearization_n50k_rows_as_psu_is_fast() -> None:
+    import time
+
+    rng = np.random.default_rng(1)
+    n = 50_000
+    z = rng.normal(size=n)
+    st = np.array(["1"] * n, dtype=object)
+    psu = np.arange(n).astype(str)
+    t0 = time.perf_counter()
+    var, n_psu, lonely = ultimate_cluster_variance(z, st, psu)
+    elapsed = time.perf_counter() - t0
+    assert lonely == ()
+    assert n_psu == n
+    assert var > 0
+    assert elapsed < 1.0
+    z2 = np.column_stack([z, z + 1.0])
+    t1 = time.perf_counter()
+    cov, n2, lonely2 = ultimate_cluster_covariance(z2, st, psu)
+    elapsed2 = time.perf_counter() - t1
+    assert n2 == n
+    assert lonely2 == ()
+    assert cov.shape == (2, 2)
+    assert elapsed2 < 1.0
