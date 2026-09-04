@@ -52,14 +52,14 @@ def _resolve_before(
     frame: pd.DataFrame,
     before: pd.Series | Reference | None,
 ) -> pd.Series:
-    if before is None or before == "base":
-        if "base_weight" not in frame.columns:
-            raise ValueError("reference='base' requires a base_weight column")
-        return frame["base_weight"].astype(float)
     if isinstance(before, pd.Series):
         if len(before) != len(frame):
             raise ValueError("before weights length must match data rows")
         return before.astype(float)
+    if before is None or before == "base":
+        if "base_weight" not in frame.columns:
+            raise ValueError("reference='base' requires a base_weight column")
+        return frame["base_weight"].astype(float)
     raise TypeError("before must be None, 'base', or a weight Series")
 
 

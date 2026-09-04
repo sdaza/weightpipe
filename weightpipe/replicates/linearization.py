@@ -22,6 +22,41 @@ def _stratum_psu_codes(
     return st, cl
 
 
+def _psu_totals(
+    z: np.ndarray,
+    strata: np.ndarray,
+    psu: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Sum unit-level scores ``z`` by (stratum, PSU).
+
+    When every row is already its own PSU, totals are ``z`` itself.
+    Group sums use ``np.bincount`` so they match the previous per-PSU
+    ``.sum()`` (row order) rather than pandas ``groupby``.
+    """
+    z = np.asarray(z, dtype=float)
+    st = np.asarray(strata)
+    cl = np.asarray(psu)
+    one_d = z.ndim == 1
+    z2 = z.reshape(-1, 1) if one_d else z
+    n, p = z2.shape
+    if n == 0 or pd.Index(cl).is_unique:
+        return z, st
+    st_codes, st_uniques = pd.factorize(st, sort=False)
+    psu_codes, _ = pd.factorize(cl, sort=False)
+    nlev = np.int64(psu_codes.max()) + 1
+    combined = st_codes.astype(np.int64, copy=False) * nlev + psu_codes.astype(np.int64, copy=False)
+    pair_codes, pair_uniques = pd.factorize(combined, sort=False)
+    n_groups = len(pair_uniques)
+    totals = np.empty((n_groups, p), dtype=float)
+    for j in range(p):
+        totals[:, j] = np.bincount(pair_codes, weights=z2[:, j], minlength=n_groups)
+    st_of = np.asarray(pair_uniques, dtype=np.int64) // nlev
+    totals_strata = np.asarray(st_uniques)[st_of]
+    if one_d:
+        return totals[:, 0], totals_strata
+    return totals, totals_strata
+
+
 def ultimate_cluster_variance(
     z: np.ndarray,
     strata: np.ndarray,
@@ -36,19 +71,20 @@ def ultimate_cluster_variance(
     Lonely strata (one PSU) contribute 0 and are named in the warning list.
     """
     z = np.asarray(z, dtype=float)
+    totals, totals_strata = _psu_totals(z, strata, psu)
+    frame = pd.DataFrame({"t": totals, "st": totals_strata})
+    grp = frame.groupby("st", sort=False, observed=True)["t"]
     var = 0.0
     n_psu = 0
     lonely: list[str] = []
-    for h in pd.unique(strata):
-        idx = np.where(strata == h)[0]
-        psus = pd.unique(psu[idx])
-        nh = len(psus)
+    for h, t in grp:
+        tot = np.asarray(t, dtype=float)
+        nh = tot.size
         if nh < 2:
             lonely.append(str(h))
             continue
-        totals = np.array([float(z[idx][psu[idx] == p].sum()) for p in psus], dtype=float)
-        mean_t = float(totals.mean())
-        var += (nh / (nh - 1.0)) * float(np.sum((totals - mean_t) ** 2))
+        mean_t = float(tot.mean())
+        var += (nh / (nh - 1.0)) * float(np.sum((tot - mean_t) ** 2))
         n_psu += nh
     return var, n_psu, tuple(lonely)
 
@@ -65,21 +101,23 @@ def ultimate_cluster_covariance(
     n, p = z.shape
     if n != len(strata) or n != len(psu):
         raise ValueError("z, strata, and psu lengths must match")
+    totals, totals_strata = _psu_totals(z, strata, psu)
     var = np.zeros((p, p), dtype=float)
     n_psu = 0
     lonely: list[str] = []
-    for h in pd.unique(strata):
-        idx = np.where(strata == h)[0]
-        psus = pd.unique(psu[idx])
-        nh = len(psus)
-        if nh < 2:
+    st_frame = pd.DataFrame(totals)
+    st_frame["st"] = totals_strata
+    value_cols = [c for c in st_frame.columns if c != "st"]
+    for h, g in st_frame.groupby("st", sort=False, observed=True):
+        arr = g[value_cols].to_numpy(dtype=float)
+        n_h = arr.shape[0]
+        if n_h < 2:
             lonely.append(str(h))
             continue
-        totals = np.array([z[idx][psu[idx] == q].sum(axis=0) for q in psus], dtype=float)
-        mean_t = totals.mean(axis=0)
-        centered = totals - mean_t
-        var += (nh / (nh - 1.0)) * (centered.T @ centered)
-        n_psu += nh
+        mean_t = arr.mean(axis=0)
+        centered = arr - mean_t
+        var += (n_h / (n_h - 1.0)) * (centered.T @ centered)
+        n_psu += n_h
     return var, n_psu, tuple(lonely)
 
 
